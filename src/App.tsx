@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { CameraScanner } from './components/CameraScanner'
+import { MerchantsDialog } from './components/MerchantsDialog'
 import { ReceiptTable } from './components/ReceiptTable'
 import { loadReceipt, normalizeReceiptUrl } from './lib/receiptApi'
 import { readReceiptUrl } from './lib/receiptBarcode'
@@ -8,6 +9,7 @@ import { parseReceipt } from './lib/receiptData'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { memoryCleared } from './store'
 import { receiptAdded } from './store/receiptsSlice'
+import { merchantSaved } from './store/merchantsSlice'
 
 type Theme = 'light' | 'dark'
 
@@ -33,15 +35,18 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null)
   const cameraPhotoInput = useRef<HTMLInputElement>(null)
   const cameraButton = useRef<HTMLButtonElement>(null)
+  const merchantsButton = useRef<HTMLButtonElement>(null)
   const busy = useRef(false)
   const [phase, setPhase] = useState<'idle' | 'scanning' | 'loading'>('idle')
   const [importFailures, setImportFailures] = useState<ImportFailure[]>([])
   const [fileProgress, setFileProgress] = useState<FileProgress | null>(null)
   const [cameraOpen, setCameraOpen] = useState(false)
+  const [merchantsOpen, setMerchantsOpen] = useState(false)
   const [receiptUrl, setReceiptUrl] = useState('')
   const [notice, setNotice] = useState('')
   const dispatch = useAppDispatch()
   const receipts = useAppSelector((state) => state.receipts.items)
+  const merchants = useAppSelector((state) => state.merchants.items)
   const isBusy = phase !== 'idle'
   const dark = preference ? preference === 'dark' : systemDark
 
@@ -176,14 +181,22 @@ export default function App() {
   }, [dark])
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 pt-20 pb-10 sm:px-6 lg:max-w-none">
-      <div className="absolute top-4 right-4 flex items-center gap-3 sm:right-6">
-        <button type="button" onClick={toggleTheme} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Switch to light mode' : 'Switch to dark mode'} className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-black/10 bg-white text-black/70 shadow-sm transition-colors hover:bg-violet-50 hover:text-violet-700 dark:border-white/10 dark:bg-[#1e1e25] dark:text-white/70 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            {dark ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></> : <path d="M20.9 13.1A9 9 0 0 1 10.9 3.1a9 9 0 1 0 10 10Z" />}
+    <main className="mx-auto flex min-h-svh w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 pt-32 pb-10 sm:px-6 sm:pt-20 lg:max-w-none">
+      <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-3 sm:inset-x-6">
+        <button ref={merchantsButton} type="button" onClick={() => setMerchantsOpen(true)} disabled={cameraOpen} aria-haspopup="dialog" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-black/10 bg-white px-4 text-sm font-medium shadow-sm transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:opacity-50 dark:border-white/10 dark:bg-[#1e1e25] dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 10v10h18V10M2 10l2-7h16l2 7M8 20v-7h8v7M2 10h20" />
           </svg>
+          Merchants
         </button>
-        <span className="whitespace-nowrap text-xs text-black/55 dark:text-white/55">Version <time dateTime={releaseTimestamp} title="Release build time (UTC)" className="font-mono tabular-nums">{releaseVersion}</time></span>
+        <div className="ml-auto flex items-center gap-3">
+          <button type="button" onClick={toggleTheme} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Switch to light mode' : 'Switch to dark mode'} className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-black/10 bg-white text-black/70 shadow-sm transition-colors hover:bg-violet-50 hover:text-violet-700 dark:border-white/10 dark:bg-[#1e1e25] dark:text-white/70 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {dark ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></> : <path d="M20.9 13.1A9 9 0 0 1 10.9 3.1a9 9 0 1 0 10 10Z" />}
+            </svg>
+          </button>
+          <span className="whitespace-nowrap text-xs text-black/55 dark:text-white/55">Version <time dateTime={releaseTimestamp} title="Release build time (UTC)" className="font-mono tabular-nums">{releaseVersion}</time></span>
+        </div>
       </div>
       <header className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Receipt collector</h1>
@@ -234,7 +247,11 @@ export default function App() {
           </ul>
         </div>
       )}
-      <ReceiptTable receipts={receipts} onClearMemory={clearMemory} clearDisabled={isBusy || cameraOpen} />
+      <ReceiptTable receipts={receipts} merchants={merchants} onClearMemory={clearMemory} clearDisabled={isBusy || cameraOpen} />
+      {merchantsOpen && <MerchantsDialog merchants={merchants} onSave={(merchant) => dispatch(merchantSaved(merchant))} onClose={() => {
+        setMerchantsOpen(false)
+        requestAnimationFrame(() => merchantsButton.current?.focus())
+      }} />}
       {cameraOpen && <CameraScanner onScan={importCameraReceipt} onTakePhoto={() => {
         setCameraOpen(false)
         cameraPhotoInput.current?.click()

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
 import type { Download, Page } from '@playwright/test'
 import ExcelJS from 'exceljs'
+import { DEFAULT_MERCHANTS } from '../src/lib/merchants'
 import { createReceiptWorkbook } from '../src/lib/receiptExport'
 import type { Receipt } from '../src/types/receipt'
 
@@ -98,8 +99,8 @@ test('Excel round trip preserves receipt values, identifiers and item relationsh
     'Check Number', 'Date', 'Total amount (сом)', 'VAT amount (сом)'])
   expect(final.getCell('A2').value).toBe(1)
   expect(final.getCell('A3').value).toBe(2)
-  expect(final.getCell('B2').value).toBe('groceries')
-  expect(final.getCell('B3').value).toBe('groceries')
+  expect(final.getCell('B2').value).toBeNull()
+  expect(final.getCell('B3').value).toBeNull()
   expect(final.getCell('C2').value).toBe(`${first.merchant} - ${first.tin}`)
   expect(final.getCell('C2').type).toBe(ExcelJS.ValueType.String)
   expect(final.getCell('C3').value).toBe(`${second.merchant} - ${second.tin}`)
@@ -159,8 +160,10 @@ test('Download Excel is disabled when empty and downloads imported data on a sma
   expect(receipts.getCell('F2').value).toBe(97.65)
   expect(workbook.getWorksheet('Purchased items')!.rowCount).toBe(4)
   const final = workbook.getWorksheet('Final')!
-  expect(final.getRow(2).values).toEqual([undefined, 1, 'groceries', 'Sample Market - 00000000000001',
-    '191', new Date('2026-09-17T00:00:00.000Z'), 919.5, 97.65])
+  for (const [column, value] of Object.entries({ A: 1, B: null, C: 'Sample Market - 00000000000001',
+    D: '191', E: new Date('2026-09-17T00:00:00.000Z'), F: 919.5, G: 97.65 })) {
+    expect(final.getCell(`${column}2`).value).toEqual(value)
+  }
   expect(final.getCell('B6').value).toBe("Employee's signature:")
   expect(final.getCell('E6').value).toBe('Date')
   expect((final.getCell('E7').value as Date).toISOString()).toBe('2026-09-21T00:00:00.000Z')
@@ -191,10 +194,30 @@ test('saved receipts can be exported for the first time after reloading offline'
   expect(workbook.getWorksheet('Purchased items')!.getCell('E2').value).toBe('Shaving foam')
   const final = workbook.getWorksheet('Final')!
   expect(final.getCell('A2').value).toBe(1)
-  expect(final.getCell('B2').value).toBe('groceries')
+  expect(final.getCell('B2').value).toBeNull()
   expect(final.getCell('C2').value).toBe('Sample Market - 00000000000001')
   expect(final.getCell('D2').value).toBe('191')
   expect(final.getCell('F2').value).toBe(919.5)
   expect(final.getCell('G2').value).toBe(97.65)
   expect(final.getCell('B6').value).toBe("Employee's signature:")
+})
+
+test('Final exports default, edited and custom merchant categories while leaving unknown merchants blank', async () => {
+  const names = ['Магазин dns № 2', 'ОсОО «ГЛОБУС»', 'Аптека неман № 5',
+    'АЗС BISHKEK   PETROLEUM № 7', 'Sample Market']
+  const receipts = names.map((merchant, index) => receipt({ id: `category-${index}`, merchant }))
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(await createReceiptWorkbook(receipts).xlsx.writeBuffer())
+  const final = workbook.getWorksheet('Final')!
+  for (const [index, category] of ['electronics', 'groceries', 'pharmacy', 'fuel', null].entries()) {
+    expect(final.getCell(`B${index + 2}`).value).toBe(category)
+  }
+
+  const mappings = DEFAULT_MERCHANTS.map(mapping => mapping.key === 'DNS'
+    ? { ...mapping, category: 'equipment' } : { ...mapping })
+  mappings.push({ id: 'custom-market', key: 'Sample Market', category: 'office supplies' })
+  const editedWorkbook = new ExcelJS.Workbook()
+  await editedWorkbook.xlsx.load(await createReceiptWorkbook(receipts, mappings).xlsx.writeBuffer())
+  expect(editedWorkbook.getWorksheet('Final')!.getCell('B2').value).toBe('equipment')
+  expect(editedWorkbook.getWorksheet('Final')!.getCell('B6').value).toBe('office supplies')
 })

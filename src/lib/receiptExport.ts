@@ -1,6 +1,8 @@
 import ExcelJS from 'exceljs'
 import type { Column, Worksheet } from 'exceljs'
 import type { Receipt } from '../types/receipt'
+import { DEFAULT_MERCHANTS, findMerchantCategory } from './merchants'
+import type { MerchantMapping } from './merchants'
 
 const moneyFormat = '#,##0.00'
 const dateFormat = 'dd.mm.yyyy'
@@ -41,7 +43,7 @@ function finishSheet(sheet: Worksheet) {
   })
 }
 
-export function createReceiptWorkbook(receipts: readonly Receipt[]) {
+export function createReceiptWorkbook(receipts: readonly Receipt[], merchants: readonly MerchantMapping[] = DEFAULT_MERCHANTS) {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Receipt collector'
   const summary = workbook.addWorksheet('Receipts')
@@ -91,7 +93,7 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
       source: { text: 'View receipt', hyperlink: receipt.sourceUrl },
     })
     final.addRow({
-      number: index + 1, service: 'groceries', merchantTin: `${receipt.merchant} - ${receipt.tin}`,
+      number: index + 1, service: findMerchantCategory(receipt.merchant, merchants), merchantTin: `${receipt.merchant} - ${receipt.tin}`,
       ticketNumber: receipt.ticketNumber, date, total, vat,
     })
     for (const item of receipt.items) {
@@ -119,9 +121,9 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
   return workbook
 }
 
-export async function downloadReceipts(receipts: readonly Receipt[]) {
+export async function downloadReceipts(receipts: readonly Receipt[], merchants: readonly MerchantMapping[] = DEFAULT_MERCHANTS) {
   if (!receipts.length) return
-  const workbook = createReceiptWorkbook(receipts)
+  const workbook = createReceiptWorkbook(receipts, merchants)
   const data = await workbook.xlsx.writeBuffer()
   const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)

@@ -1,5 +1,7 @@
 import { Fragment, useRef, useState } from 'react'
 import type { Receipt } from '../types/receipt'
+import { findMerchantCategory } from '../lib/merchants'
+import type { MerchantMapping } from '../lib/merchants'
 
 const money = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const receiptDate = new Intl.DateTimeFormat('ru-RU', {
@@ -8,8 +10,9 @@ const receiptDate = new Intl.DateTimeFormat('ru-RU', {
 const cell = 'px-4 py-4 text-left align-top'
 const numberCell = `${cell} whitespace-nowrap font-mono text-xs`
 
-export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
+export function ReceiptTable({ receipts, merchants, onClearMemory, clearDisabled }: {
   receipts: Receipt[]
+  merchants: MerchantMapping[]
   onClearMemory: () => void
   clearDisabled: boolean
 }) {
@@ -24,7 +27,7 @@ export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
     setExportError(null)
     try {
       const { downloadReceipts } = await import('../lib/receiptExport')
-      await downloadReceipts(receipts)
+      await downloadReceipts(receipts, merchants)
     } catch {
       setExportError('Could not create the Excel file. Please try again.')
     } finally {
@@ -65,14 +68,14 @@ export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
           <caption className="sr-only">Imported receipt information</caption>
           <thead className="border-b border-black/10 bg-black/[0.025] text-xs text-black/60 dark:border-white/10 dark:bg-white/[0.025] dark:text-white/60">
             <tr>
-              {['Date', 'Чек №', 'Merchant', 'Total amount', 'НДС amount', 'ИНН', 'ККМ №', 'ФМ №', 'ФПД', 'ФД №', 'Source', 'Feed'].map((heading) => (
+              {['Date', 'Чек №', 'Merchant', 'Category', 'Total amount', 'НДС amount', 'ИНН', 'ККМ №', 'ФМ №', 'ФПД', 'ФД №', 'Source', 'Feed'].map((heading) => (
                 <th key={heading} scope="col" className="whitespace-nowrap px-4 py-3 text-left font-medium">{heading}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {!receipts.length && (
-              <tr><td colSpan={12} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
+              <tr><td colSpan={13} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
             )}
             {receipts.map((receipt) => (
               <Fragment key={receipt.id}>
@@ -83,6 +86,7 @@ export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
                     <p className="font-medium">{receipt.merchant}</p>
                     {receipt.merchantAddress && <p className="mt-1 text-xs text-black/50 dark:text-white/50">{receipt.merchantAddress}</p>}
                   </td>
+                  <td className={`${cell} min-w-36 wrap-anywhere`}>{findMerchantCategory(receipt.merchant, merchants) ?? <span className="text-black/50 dark:text-white/50">Uncategorized</span>}</td>
                   <td className={`${cell} whitespace-nowrap font-medium tabular-nums`}>{money.format(receipt.totalAmountMinor / 100)}</td>
                   <td className={`${cell} whitespace-nowrap tabular-nums`}>{receipt.vatAmountMinor === null ? <span title="VAT was not provided by the receipt">—</span> : money.format(receipt.vatAmountMinor / 100)}</td>
                   <td className={numberCell}>{receipt.tin}</td>
@@ -94,7 +98,7 @@ export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
                   <td className={`${cell} min-w-40 wrap-anywhere`}>{receipt.feed ?? '—'}</td>
                 </tr>
                 <tr className="border-b border-black/10 last:border-0 dark:border-white/10">
-                  <td colSpan={12} className="px-4 pb-4">
+                  <td colSpan={13} className="px-4 pb-4">
                     <details>
                       <summary className="w-fit cursor-pointer text-xs text-violet-700 dark:text-violet-300">Purchased items ({receipt.items.length})</summary>
                       <table className="mt-3 w-full max-w-3xl text-xs">
