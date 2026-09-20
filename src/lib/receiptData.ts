@@ -94,6 +94,7 @@ export function parseReceipt(data: unknown, sourceUrl: string): Receipt {
     sourceUrl: receiptUrl(sourceUrl),
     importedAt: new Date().toISOString(),
     dateTime: dateTime(receipt.dateTime),
+    ticketNumber: receipt.ticketNumber == null ? null : identifier(receipt.ticketNumber, 'receipt number'),
     merchant: text(location.locationName, 'merchant name'),
     merchantAddress: typeof address === 'string' && address.trim() ? address.trim() : null,
     totalAmountMinor: money(receipt.ticketTotalSum, 'receipt total'),

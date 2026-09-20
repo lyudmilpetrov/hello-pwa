@@ -3,7 +3,7 @@ import type { Receipt } from '../types/receipt'
 
 const money = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const receiptDate = new Intl.DateTimeFormat('ru-RU', {
-  dateStyle: 'short', timeStyle: 'medium', timeZone: 'Asia/Bishkek',
+  day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Bishkek',
 })
 const cell = 'px-4 py-4 text-left align-top'
 const numberCell = `${cell} whitespace-nowrap font-mono text-xs`
@@ -34,7 +34,7 @@ export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Receipts <span className="text-sm font-normal text-black/50 dark:text-white/50">({receipts.length})</span></h2>
-          <p className="mt-1 text-xs text-black/50 dark:text-white/50">Amounts in сом · Time in Bishkek</p>
+          <p className="mt-1 text-xs text-black/50 dark:text-white/50">Amounts in сом</p>
         </div>
         <button type="button" onClick={downloadExcel} disabled={!receipts.length || isExporting} aria-busy={isExporting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-violet-700/20 bg-white px-4 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-default disabled:opacity-50 dark:border-violet-300/25 dark:bg-[#1e1e25] dark:text-violet-300 dark:hover:bg-violet-400/10">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -49,19 +49,20 @@ export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
           <caption className="sr-only">Imported receipt information</caption>
           <thead className="border-b border-black/10 bg-black/[0.025] text-xs text-black/60 dark:border-white/10 dark:bg-white/[0.025] dark:text-white/60">
             <tr>
-              {['Date', 'Merchant', 'Total amount', 'НДС amount', 'ИНН', 'ККМ №', 'ФМ №', 'ФПД', 'ФД №', 'Source'].map((heading) => (
+              {['Date', 'Чек №', 'Merchant', 'Total amount', 'НДС amount', 'ИНН', 'ККМ №', 'ФМ №', 'ФПД', 'ФД №', 'Source'].map((heading) => (
                 <th key={heading} scope="col" className="whitespace-nowrap px-4 py-3 text-left font-medium">{heading}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {!receipts.length && (
-              <tr><td colSpan={10} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
+              <tr><td colSpan={11} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
             )}
             {receipts.map((receipt) => (
               <Fragment key={receipt.id}>
                 <tr>
                   <td className={`${cell} whitespace-nowrap`}><time dateTime={receipt.dateTime}>{receiptDate.format(new Date(receipt.dateTime))}</time></td>
+                  <td className={numberCell}>{receipt.ticketNumber ?? <span title="Receipt number is unavailable. Reimport an older receipt to retrieve it.">—</span>}</td>
                   <td className={`${cell} min-w-56`}>
                     <p className="font-medium">{receipt.merchant}</p>
                     {receipt.merchantAddress && <p className="mt-1 text-xs text-black/50 dark:text-white/50">{receipt.merchantAddress}</p>}
@@ -76,7 +77,7 @@ export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
                   <td className={cell}><a href={receipt.sourceUrl} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-violet-700 underline underline-offset-4 dark:text-violet-300">View receipt</a></td>
                 </tr>
                 <tr className="border-b border-black/10 last:border-0 dark:border-white/10">
-                  <td colSpan={10} className="px-4 pb-4">
+                  <td colSpan={11} className="px-4 pb-4">
                     <details>
                       <summary className="w-fit cursor-pointer text-xs text-violet-700 dark:text-violet-300">Purchased items ({receipt.items.length})</summary>
                       <table className="mt-3 w-full max-w-3xl text-xs">

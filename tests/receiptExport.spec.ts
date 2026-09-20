@@ -15,7 +15,7 @@ function receipt(overrides: Partial<Receipt> = {}): Receipt {
     merchantAddress: 'Бишкек, улица Примерная, 1', totalAmountMinor: 250,
     vatAmountMinor: null, currency: 'KGS', tin: '00000000000001',
     kkmNumber: '0000000000229871', fmNumber: '0000000002369707',
-    fpd: '254486752077560123', fdNumber: '000172045',
+    fpd: '254486752077560123', fdNumber: '000172045', ticketNumber: '00011677',
     items: [{ name: '=Чай', quantity: 0.25, unitPriceMinor: 1000, totalAmountMinor: 250 }],
     ...overrides,
   }
@@ -42,6 +42,7 @@ async function downloadedWorkbook(download: Download) {
 test('Excel round trip preserves receipt values, identifiers and item relationships', async () => {
   const first = receipt()
   const second = receipt({ id: 'receipt-002', merchant: 'Другой магазин', vatAmountMinor: 0,
+    ticketNumber: null, dateTime: '2026-09-17T17:59:59.000Z',
     totalAmountMinor: 12345, items: [{ name: 'Хлеб', quantity: 2, unitPriceMinor: 6172, totalAmountMinor: 12345 }] })
   const exported = createReceiptWorkbook([first, second])
   const workbook = new ExcelJS.Workbook()
@@ -52,31 +53,42 @@ test('Excel round trip preserves receipt values, identifiers and item relationsh
   expect(receipts.rowCount).toBe(3)
   expect(items.rowCount).toBe(3)
   expect(receipts.getCell('A2').type).toBe(ExcelJS.ValueType.Date)
-  expect((receipts.getCell('A2').value as Date).toISOString()).toBe('2026-09-18T03:56:23.000Z')
-  expect(receipts.getCell('B2').value).toBe(first.merchant)
-  expect(receipts.getCell('B2').type).toBe(ExcelJS.ValueType.String)
-  expect(receipts.getCell('C2').value).toBe(first.merchantAddress)
-  expect(receipts.getCell('D2').value).toBe(2.5)
-  expect(receipts.getCell('D2').type).toBe(ExcelJS.ValueType.Number)
-  expect(receipts.getCell('D2').numFmt).toMatch(/0\.00/)
-  expect(receipts.getCell('D3').value).toBe(123.45)
-  expect(receipts.getCell('E2').value).toBeNull()
-  expect(receipts.getCell('E3').value).toBe(0)
-  for (const [column, value] of Object.entries({ F: first.tin, G: first.kkmNumber,
-    H: first.fmNumber, I: first.fpd, J: first.fdNumber, L: first.id })) {
+  expect((receipts.getCell('A2').value as Date).toISOString()).toBe('2026-09-18T00:00:00.000Z')
+  expect((receipts.getCell('A3').value as Date).toISOString()).toBe('2026-09-17T00:00:00.000Z')
+  expect(receipts.getCell('A2').numFmt).toBe('dd.mm.yyyy')
+  expect(receipts.getCell('B1').value).toBe('Чек №')
+  expect(receipts.getCell('B2').numFmt).toBe('@')
+  expect(receipts.getCell('B3').value).toBeNull()
+  expect(receipts.getCell('C2').value).toBe(first.merchant)
+  expect(receipts.getCell('C2').type).toBe(ExcelJS.ValueType.String)
+  expect(receipts.getCell('D2').value).toBe(first.merchantAddress)
+  expect(receipts.getCell('E2').value).toBe(2.5)
+  expect(receipts.getCell('E2').type).toBe(ExcelJS.ValueType.Number)
+  expect(receipts.getCell('E2').numFmt).toMatch(/0\.00/)
+  expect(receipts.getCell('E3').value).toBe(123.45)
+  expect(receipts.getCell('F2').value).toBeNull()
+  expect(receipts.getCell('F3').value).toBe(0)
+  for (const [column, value] of Object.entries({ B: first.ticketNumber, G: first.tin, H: first.kkmNumber,
+    I: first.fmNumber, J: first.fpd, K: first.fdNumber, M: first.id })) {
     expect(receipts.getCell(`${column}2`).value).toBe(value)
     expect(receipts.getCell(`${column}2`).type).toBe(ExcelJS.ValueType.String)
   }
-  expect(receipts.getCell('K2').value).toMatchObject({ hyperlink: first.sourceUrl })
+  expect(receipts.getCell('L2').value).toMatchObject({ hyperlink: first.sourceUrl })
   expect(items.getCell('A2').value).toBe(first.id)
   expect(items.getCell('A3').value).toBe(second.id)
   expect(items.getCell('B2').value).toEqual(receipts.getCell('A2').value)
-  expect(items.getCell('C2').value).toBe(first.merchant)
-  expect(items.getCell('D2').value).toBe('=Чай')
-  expect(items.getCell('D2').type).toBe(ExcelJS.ValueType.String)
-  expect(items.getCell('E2').value).toBe(0.25)
-  expect(items.getCell('F2').value).toBe(10)
-  expect(items.getCell('G2').value).toBe(2.5)
+  expect(items.getCell('B2').numFmt).toBe('dd.mm.yyyy')
+  expect(items.getCell('C1').value).toBe('Чек №')
+  expect(items.getCell('C2').value).toBe(first.ticketNumber)
+  expect(items.getCell('C2').type).toBe(ExcelJS.ValueType.String)
+  expect(items.getCell('C2').numFmt).toBe('@')
+  expect(items.getCell('C3').value).toBeNull()
+  expect(items.getCell('D2').value).toBe(first.merchant)
+  expect(items.getCell('E2').value).toBe('=Чай')
+  expect(items.getCell('E2').type).toBe(ExcelJS.ValueType.String)
+  expect(items.getCell('F2').value).toBe(0.25)
+  expect(items.getCell('G2').value).toBe(10)
+  expect(items.getCell('H2').value).toBe(2.5)
 })
 
 test('Download Excel is disabled when empty and downloads imported data on a small screen', async ({ page }) => {
@@ -95,9 +107,12 @@ test('Download Excel is disabled when empty and downloads imported data on a sma
   await button.click()
   const workbook = await downloadedWorkbook(await pendingDownload)
   const receipts = workbook.getWorksheet('Receipts')!
-  expect(receipts.getCell('B2').value).toBe('Sample Market')
-  expect(receipts.getCell('D2').value).toBe(919.5)
-  expect(receipts.getCell('E2').value).toBe(97.65)
+  expect((receipts.getCell('A2').value as Date).toISOString()).toBe('2026-09-17T00:00:00.000Z')
+  expect(receipts.getCell('A2').numFmt).toBe('dd.mm.yyyy')
+  expect(receipts.getCell('B2').value).toBe('191')
+  expect(receipts.getCell('C2').value).toBe('Sample Market')
+  expect(receipts.getCell('E2').value).toBe(919.5)
+  expect(receipts.getCell('F2').value).toBe(97.65)
   expect(workbook.getWorksheet('Purchased items')!.rowCount).toBe(4)
   await expect(button).toBeEnabled()
 })
@@ -117,6 +132,8 @@ test('saved receipts can be exported for the first time after reloading offline'
   const pendingDownload = page.waitForEvent('download')
   await button.click()
   const workbook = await downloadedWorkbook(await pendingDownload)
-  expect(workbook.getWorksheet('Receipts')!.getCell('F2').value).toBe('00000000000001')
-  expect(workbook.getWorksheet('Purchased items')!.getCell('D2').value).toBe('Shaving foam')
+  expect(workbook.getWorksheet('Receipts')!.getCell('B2').value).toBe('191')
+  expect(workbook.getWorksheet('Receipts')!.getCell('G2').value).toBe('00000000000001')
+  expect(workbook.getWorksheet('Purchased items')!.getCell('C2').value).toBe('191')
+  expect(workbook.getWorksheet('Purchased items')!.getCell('E2').value).toBe('Shaving foam')
 })

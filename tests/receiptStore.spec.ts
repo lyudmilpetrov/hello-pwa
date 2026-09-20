@@ -9,6 +9,7 @@ function receipt(overrides: Partial<Receipt> = {}): Receipt {
     sourceUrl: 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?fixture=001',
     importedAt: '2026-09-20T11:00:00.000Z',
     dateTime: '2026-09-17T11:56:23.000Z',
+    ticketNumber: '000087',
     merchant: 'Sample Market',
     merchantAddress: null,
     totalAmountMinor: 250,
@@ -49,6 +50,18 @@ test('persists only versioned receipt data and retains exact identifiers and min
   saveReceipts(storage, [original])
   expect(JSON.parse(storage.getItem(RECEIPTS_STORAGE_KEY)!)).toEqual({ version: 1, receipts: [original] })
   expect(loadReceipts(storage)).toEqual([original])
+})
+
+test('restores older receipts without a number and fills it in on reimport', () => {
+  const storage = memoryStorage()
+  const { ticketNumber, ...legacy } = receipt()
+  storage.setItem(RECEIPTS_STORAGE_KEY, JSON.stringify({ version: 1, receipts: [legacy] }))
+  const restored = loadReceipts(storage)
+  expect(restored).toEqual([{ ...legacy, ticketNumber: null }])
+  const state = receiptsReducer({ items: restored }, receiptAdded(receipt()))
+  saveReceipts(storage, state.items)
+  expect(loadReceipts(storage)).toEqual([receipt()])
+  expect(state.items[0].ticketNumber).toBe(ticketNumber)
 })
 
 test('filters corrupt dates per receipt without discarding valid neighboring records', () => {

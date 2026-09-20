@@ -4,7 +4,7 @@ type CameraRange = { min: number; max: number; step?: number }
 // though they are not part of TypeScript's core MediaStream DOM declarations.
 type CameraCapabilities = MediaTrackCapabilities & {
   focusMode?: string[]
-  torch?: boolean
+  torch?: boolean | boolean[]
   zoom?: CameraRange
 }
 type CameraSettings = MediaTrackSettings & { torch?: boolean; zoom?: number }
@@ -24,7 +24,10 @@ export function getCameraControls(track: MediaStreamTrack): CameraControls {
     const capabilities = track.getCapabilities() as CameraCapabilities
     const settings = track.getSettings() as CameraSettings
     controls.continuousFocus = capabilities.focusMode?.includes('continuous') ?? false
+    // Accept legacy boolean support flags and the specification's list of
+    // supported values. A single fixed value cannot provide an on/off toggle.
     controls.torch = capabilities.torch === true
+      || (Array.isArray(capabilities.torch) && capabilities.torch.includes(true) && capabilities.torch.includes(false))
     controls.torchOn = settings.torch === true
     const range = capabilities.zoom
     if (range && Number.isFinite(range.min) && Number.isFinite(range.max) && range.min >= 0 && range.max > range.min) {

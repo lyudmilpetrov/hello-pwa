@@ -13,6 +13,7 @@ test('normalizes the fiscal API shape, minor units, IDs, and UTC date', () => {
     id: 'receipt-fixture-001',
     sourceUrl,
     dateTime: '2026-09-17T11:56:23.000Z',
+    ticketNumber: '191',
     merchant: 'Sample Market',
     merchantAddress: '1 Example Street, Bishkek',
     totalAmountMinor: 91950,
@@ -37,11 +38,21 @@ test('normalizes the fiscal API shape, minor units, IDs, and UTC date', () => {
 test('retains zero-leading identifiers and decimal quantities without changing minor units', () => {
   const data = fresh()
   data.fdNumber = '000001'
+  data.ticketNumber = '000087'
   data.items = [{ goodName: 'Weighted item', goodQuantity: 0.25, goodPrice: 1000, goodCost: 250 }]
   data.ticketTotalSum = 250
   const receipt = parseReceipt(data, sourceUrl)
   expect(receipt.fdNumber).toBe('000001')
+  expect(receipt.ticketNumber).toBe('000087')
   expect(receipt.items).toEqual([{ name: 'Weighted item', quantity: 0.25, unitPriceMinor: 1000, totalAmountMinor: 250 }])
+})
+
+test('keeps missing receipt numbers unknown without substituting the FD number', () => {
+  for (const ticketNumber of [undefined, null]) {
+    const data = fresh()
+    data.ticketNumber = ticketNumber
+    expect(parseReceipt(data, sourceUrl).ticketNumber).toBeNull()
+  }
 })
 
 test('combines multiple VAT rates and excludes sales tax', () => {
@@ -103,6 +114,10 @@ test('rejects malformed or unsafe monetary values instead of rounding or coercin
 test('rejects malformed identifiers, dates, quantities, and item collections', () => {
   for (const [key, value] of [
     ['tin', Number.MAX_SAFE_INTEGER + 1],
+    ['ticketNumber', Number.MAX_SAFE_INTEGER + 1],
+    ['ticketNumber', -1],
+    ['ticketNumber', 1.5],
+    ['ticketNumber', 'not-a-number'],
     ['documentFiscalMark', 'not-a-fiscal-mark'],
     ['dateTime', '2026-02-30T11:56:23Z'],
     ['dateTime', '2026-09-17T11:56:23'],

@@ -17,6 +17,8 @@ type CameraHarness = {
   imports: { created: number; stopped: number }[]
   photoPickers: { created: number; stopped: number }[]
   appliedConstraints: MediaTrackConstraints[]
+  nativeCalls: number
+  nativeFormats: string[]
   releasePermission: () => void
 }
 
@@ -49,6 +51,8 @@ async function installCamera(page: Page, options: {
       imports: [],
       photoPickers: [],
       appliedConstraints: [],
+      nativeCalls: 0,
+      nativeFormats: [],
       releasePermission: () => {},
     }
     window.cameraHarness = harness
@@ -114,7 +118,7 @@ async function installCamera(page: Page, options: {
             let currentConstraints: MediaTrackConstraints = {}
             let currentSettings = { focusMode: 'manual', torch: false, zoom: 1 }
             Object.defineProperties(track, {
-              getCapabilities: { value: () => ({ focusMode: ['manual', 'continuous'], torch: true, zoom: { min: 1, max: 4, step: 0.5 } }) },
+              getCapabilities: { value: () => ({ focusMode: ['manual', 'continuous'], torch: [true, false], zoom: { min: 1, max: 4, step: 0.5 } }) },
               getSettings: { value: () => ({ ...currentSettings }) },
               getConstraints: { value: () => structuredClone(currentConstraints) },
               applyConstraints: { value: async (next: MediaTrackConstraints) => {
@@ -160,6 +164,139 @@ async function expectStopped(page: Page, count = 1) {
   await expect.poll(() => page.evaluate(() => Number(sessionStorage.getItem('camera-stopped') || 0)))
     .toBe(count)
   expect(await page.evaluate(() => Number(sessionStorage.getItem('camera-created') || 0))).toBe(count)
+}
+
+function expectPhotoReceiptUrl(value: string) {
+  const actual = new URL(value)
+  const expected = new URL(photoReceiptUrl)
+  expect(`${actual.origin}${actual.pathname}`).toBe(`${expected.origin}${expected.pathname}`)
+  expect([...actual.searchParams.entries()].sort()).toEqual([...expected.searchParams.entries()].sort())
+}
+
+for (const [width, height] of [[960, 1280], [1280, 1707], [1920, 2560]]) {
+  test(`finds the receipt QR in an uncropped real-photo camera frame at ${width}x${height}`, async ({ page }) => {
+    test.skip(!existsSync(photoPath), 'The private receipt sample is not present in this checkout.')
+    test.setTimeout(60000)
+    const importedUrls: string[] = []
+    await page.route('**/api/receipts', async (route) => {
+      expect(route.request().method()).toBe('POST')
+      const { url } = route.request().postDataJSON() as { url: string }
+      expectPhotoReceiptUrl(url)
+      importedUrls.push(url)
+      await route.fulfill({ json: receiptFixture })
+    })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await installCamera(page, {
+      imageData: `data:image/jpeg;base64,${readFileSync(photoPath).toString('base64')}`,
+      width,
+      height,
+    })
+    await page.goto('./')
+    const appUrl = page.url()
+    await page.getByRole('button', { name: 'Take an image' }).click()
+    await expect(page.getByRole('heading', { name: 'Receipts (1)', exact: true })).toBeVisible({ timeout: 45000 })
+    await expect(page.getByRole('status')).toHaveText('Receipt added.')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expectStopped(page)
+    expect(importedUrls).toHaveLength(1)
+    expect(await page.evaluate(() => window.cameraHarness.imports)).toEqual([{ created: 1, stopped: 1 }])
+    await expect(page.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', importedUrls[0])
+    await expect(page).toHaveURL(appUrl)
+  })
+}
+
+test('Take a photo instead releases the live camera before opening the native photo chooser and imports its photo', async ({ page }) => {
+  test.skip(!existsSync(photoPath), 'The private receipt sample is not present in this checkout.')
+  test.setTimeout(60000)
+  const importedUrls: string[] = []
+  await page.route('**/api/receipts', async (route) => {
+    expect(route.request().method()).toBe('POST')
+    const { url } = route.request().postDataJSON() as { url: string }
+    expectPhotoReceiptUrl(url)
+    importedUrls.push(url)
+    await route.fulfill({ json: receiptFixture })
+  })
+  await installCamera(page)
+  await openCamera(page)
+  await expectLivePreview(page)
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.getByRole('button', { name: 'Take a photo instead' }).click(),
+  ])
+  expect(await chooser.element().getAttribute('accept')).toBe('image/*')
+  expect(await chooser.element().getAttribute('capture')).toBe('environment')
+  expect(await page.evaluate(() => window.cameraHarness.photoPickers)).toEqual([{ created: 1, stopped: 1 }])
+  await expectStopped(page)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await chooser.setFiles(photoPath)
+  await expect(page.getByRole('status')).toHaveText('Receipt added.', { timeout: 45000 })
+  await expect(page.getByRole('heading', { name: 'Receipts (1)', exact: true })).toBeVisible()
+  expect(importedUrls).toHaveLength(1)
+  expect(await page.evaluate(() => window.cameraHarness.requests.length)).toBe(1)
+  await expect(page.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', importedUrls[0])
+})
+
+for (const status of [404, 405]) {
+  test(`a camera scan explains an unavailable HTML ${status} backend and preserves the original receipt`, async ({ page }) => {
+    let imports = 0
+    await page.route('**/api/receipts', (route) => {
+      imports += 1
+      expect(route.request().postDataJSON()).toEqual({ url: receiptUrl })
+      return route.fulfill({ status, contentType: 'text/html', body: '<!doctype html><title>Page not found</title>' })
+    })
+    await installCamera(page, { payload: receiptUrl })
+    await page.goto('./')
+    const appUrl = page.url()
+    await page.getByRole('button', { name: 'Take an image' }).click()
+    await expect(page.getByRole('alert')).toContainText('Receipt importing is not available')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expectStopped(page)
+    await expect(page.getByLabel('Or paste a receipt link')).toHaveValue(receiptUrl)
+    await expect(page.getByRole('link', { name: 'Open original receipt' })).toHaveAttribute('href', receiptUrl)
+    await expect(page.getByRole('link', { name: 'Open original receipt' })).toHaveAttribute('rel', 'noopener noreferrer')
+    await expect(page.getByRole('heading', { name: 'Receipts (0)', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Import receipt', exact: true })).toBeEnabled()
+    expect(imports).toBe(1)
+    await expect(page).toHaveURL(appUrl)
+  })
+}
+
+for (const nativeFails of [false, true]) {
+  test(nativeFails
+    ? 'uses the bundled QR decoder when the native barcode API rejects a frame'
+    : 'imports a QR returned by the native mobile barcode API', async ({ page }) => {
+    let imports = 0
+    await page.route('**/api/receipts', (route) => {
+      imports += 1
+      expect(route.request().postDataJSON()).toEqual({ url: receiptUrl })
+      return route.fulfill({ json: receiptFixture })
+    })
+    await installCamera(page, { payload: nativeFails ? receiptUrl : undefined })
+    await page.addInitScript(({ nativeFails, receiptUrl }) => {
+      Object.defineProperty(window, 'BarcodeDetector', {
+        configurable: true,
+        value: class {
+          static async getSupportedFormats() { return ['qr_code'] }
+          constructor({ formats }: { formats: string[] }) { window.cameraHarness.nativeFormats = formats }
+          async detect(source: HTMLCanvasElement) {
+            window.cameraHarness.nativeCalls += 1
+            if (nativeFails) throw new Error('The platform barcode service is unavailable.')
+            return [{ rawValue: receiptUrl, boundingBox: { x: source.width * 0.3, y: source.height * 0.3, width: 100, height: 100 } }]
+          }
+        },
+      })
+    }, { nativeFails, receiptUrl })
+    await page.goto('./')
+    await page.getByRole('button', { name: 'Take an image' }).click()
+    await expect(page.getByRole('status')).toHaveText('Receipt added.')
+    await expect(page.getByRole('heading', { name: 'Receipts (1)', exact: true })).toBeVisible()
+    await expectStopped(page)
+    expect(await page.evaluate(() => window.cameraHarness.nativeFormats)).toEqual(['qr_code'])
+    expect(await page.evaluate(() => window.cameraHarness.nativeCalls)).toBeGreaterThan(0)
+    if (nativeFails) expect(await page.evaluate(() => window.cameraHarness.frameReads)).toBeGreaterThan(0)
+    await expect(page.getByRole('alert')).toHaveCount(0)
+    expect(imports).toBe(1)
+  })
 }
 
 test('camera QR stops the camera and imports the receipt once without leaving the app', async ({ page, context }) => {
@@ -288,6 +425,8 @@ test('shows a rear-camera preview on mobile and stops it when cancelled', async 
   ])
   await expect(page.getByRole('button', { name: 'Take an image', includeHidden: true })).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Upload file', includeHidden: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Turn light on' })).toHaveCount(0)
+  await expect(page.getByRole('slider', { name: 'Zoom' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Cancel' })).toBeInViewport()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.getByRole('button', { name: 'Cancel' }).click()
@@ -296,6 +435,50 @@ test('shows a rear-camera preview on mobile and stops it when cancelled', async 
   await expect(page.getByRole('button', { name: 'Take an image' })).toBeEnabled()
   await expect(page.getByRole('button', { name: 'Take an image' })).toBeFocused()
   await expect(page.getByRole('button', { name: 'Upload file' })).toBeEnabled()
+})
+
+test('uses mobile autofocus, light and zoom when the camera supports them', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await installCamera(page, { cameraControls: true })
+  await openCamera(page)
+  await expectLivePreview(page)
+  await expect.poll(() => page.evaluate(() => window.cameraHarness.appliedConstraints))
+    .toEqual([{ advanced: [{ focusMode: 'continuous' }] }])
+  const lightOn = page.getByRole('button', { name: 'Turn light on' })
+  await expect(lightOn).toHaveAttribute('aria-pressed', 'false')
+  await lightOn.click()
+  const lightOff = page.getByRole('button', { name: 'Turn light off' })
+  await expect(lightOff).toBeEnabled()
+  await expect(lightOff).toHaveAttribute('aria-pressed', 'true')
+  const zoom = page.getByRole('slider', { name: 'Zoom' })
+  await expect(zoom).toHaveAttribute('min', '1')
+  await expect(zoom).toHaveAttribute('max', '4')
+  await expect(zoom).toHaveAttribute('step', '0.5')
+  await zoom.focus()
+  await zoom.press('End')
+  await expect(zoom).toHaveValue('4')
+  await expect.poll(() => page.evaluate(() => window.cameraHarness.appliedConstraints.at(-1)))
+    .toEqual({ advanced: [{ focusMode: 'continuous', torch: true, zoom: 4 }] })
+  await lightOff.click()
+  await expect(page.getByRole('button', { name: 'Turn light on' })).toBeEnabled()
+  await expect.poll(() => page.evaluate(() => window.cameraHarness.appliedConstraints.at(-1)))
+    .toEqual({ advanced: [{ focusMode: 'continuous', torch: false, zoom: 4 }] })
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expectStopped(page)
+})
+
+test('retries without requested dimensions when a mobile camera rejects them', async ({ page }) => {
+  await installCamera(page, { firstError: 'OverconstrainedError' })
+  await openCamera(page)
+  await expectLivePreview(page)
+  expect(await page.evaluate(() => window.cameraHarness.requests)).toEqual([
+    { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+    { audio: false, video: { facingMode: { ideal: 'environment' } } },
+  ])
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Cancel' }).click()
+  await expectStopped(page)
 })
 
 test('Escape closes the scanner and stops its camera', async ({ page }) => {

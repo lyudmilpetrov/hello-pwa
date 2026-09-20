@@ -10,6 +10,10 @@ import { receiptAdded } from './store/receiptsSlice'
 
 type Theme = 'light' | 'dark'
 
+type ReceiptSource = { getUrl: () => Promise<string>; filename?: string }
+type ImportFailure = { filename?: string; message: string; sourceUrl: string | null }
+type FileProgress = { current: number; total: number; filename: string }
+
 function readPreference(): Theme | null {
   try {
     const value = localStorage.getItem('theme')
@@ -27,8 +31,8 @@ export default function App() {
   const cameraButton = useRef<HTMLButtonElement>(null)
   const busy = useRef(false)
   const [phase, setPhase] = useState<'idle' | 'scanning' | 'loading'>('idle')
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [failedReceiptUrl, setFailedReceiptUrl] = useState<string | null>(null)
+  const [importFailures, setImportFailures] = useState<ImportFailure[]>([])
+  const [fileProgress, setFileProgress] = useState<FileProgress | null>(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [receiptUrl, setReceiptUrl] = useState('')
   const [notice, setNotice] = useState('')
@@ -37,48 +41,75 @@ export default function App() {
   const isBusy = phase !== 'idle'
   const dark = preference ? preference === 'dark' : systemDark
 
-  const importReceipt = useCallback(async (getUrl: () => Promise<string>, scanImage: boolean) => {
-    if (busy.current) return
+  const importReceipts = useCallback(async (sources: ReceiptSource[], scanImage: boolean) => {
+    if (busy.current || sources.length === 0) return
     busy.current = true
-    setUploadError(null)
-    setFailedReceiptUrl(null)
+    setImportFailures([])
+    setFileProgress(null)
     setNotice('')
     setPhase(scanImage ? 'scanning' : 'loading')
-    let sourceUrl: string | null = null
+    const failures: ImportFailure[] = []
+    let imported = 0
     try {
-      const url = normalizeReceiptUrl(await getUrl())
-      sourceUrl = url
-      setReceiptUrl(url)
-      setPhase('loading')
-      const receipt = parseReceipt(await loadReceipt(url), url)
-      dispatch(receiptAdded(receipt))
-      setReceiptUrl('')
-      setNotice('Receipt added.')
-    } catch (error) {
-      setFailedReceiptUrl(sourceUrl)
-      setUploadError(error instanceof Error ? error.message : 'Could not import this receipt. Please try again.')
+      // Finish each image before decoding the next to limit memory and API requests.
+      for (const [index, source] of sources.entries()) {
+        setFileProgress(sources.length > 1 ? {
+          current: index + 1, total: sources.length, filename: source.filename ?? '',
+        } : null)
+        setPhase(scanImage ? 'scanning' : 'loading')
+        let sourceUrl: string | null = null
+        try {
+          const url = normalizeReceiptUrl(await source.getUrl())
+          sourceUrl = url
+          setReceiptUrl(url)
+          setPhase('loading')
+          const receipt = parseReceipt(await loadReceipt(url), url)
+          dispatch(receiptAdded(receipt))
+          imported += 1
+          setReceiptUrl('')
+        } catch (error) {
+          failures.push({
+            filename: source.filename,
+            sourceUrl,
+            message: error instanceof Error ? error.message : 'Could not import this receipt. Please try again.',
+          })
+          setImportFailures([...failures])
+        }
+      }
+      // Keep a failed link ready to retry even if a later file imported successfully.
+      const retryUrl = failures.find((failure) => failure.sourceUrl)?.sourceUrl
+      if (retryUrl) setReceiptUrl(retryUrl)
+      setNotice(sources.length === 1
+        ? imported ? 'Receipt added.' : ''
+        : failures.length
+          ? `${imported} of ${sources.length} files imported. ${failures.length} failed.`
+          : `${imported} files imported.`)
     } finally {
       busy.current = false
+      setFileProgress(null)
       setPhase('idle')
     }
   }, [dispatch])
 
   const importCameraReceipt = useCallback(async (url: string) => {
     setCameraOpen(false)
-    await importReceipt(async () => url, false)
+    await importReceipts([{ getUrl: async () => url }], false)
     requestAnimationFrame(() => cameraButton.current?.focus())
-  }, [importReceipt])
+  }, [importReceipts])
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0]
-    // Allow choosing the same image again after an unsuccessful import.
+    const files = Array.from(event.currentTarget.files ?? [])
+    // Snapshot the FileList before resetting so the same selection can be retried.
     event.currentTarget.value = ''
-    if (file && !cameraOpen) await importReceipt(() => readReceiptUrl(file), true)
+    if (!cameraOpen) await importReceipts(files.map((file) => ({
+      filename: file.name,
+      getUrl: () => readReceiptUrl(file),
+    })), true)
   }
 
   async function submitReceiptUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (receiptUrl.trim() && !cameraOpen) await importReceipt(async () => receiptUrl, false)
+    if (receiptUrl.trim() && !cameraOpen) await importReceipts([{ getUrl: async () => receiptUrl }], false)
   }
 
   useEffect(() => {
@@ -115,7 +146,7 @@ export default function App() {
         <p className="mt-2 text-sm text-black/55 dark:text-white/55">Keep receipt details and VAT together.</p>
       </header>
       <div role="group" aria-label="Image actions" className="inline-flex items-center gap-1 rounded-2xl border border-black/10 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#1e1e25]">
-        <button ref={cameraButton} type="button" onClick={() => { setUploadError(null); setFailedReceiptUrl(null); setNotice(''); setCameraOpen(true) }} disabled={isBusy || cameraOpen} aria-haspopup="dialog" className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:cursor-wait disabled:opacity-50 sm:px-5 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
+        <button ref={cameraButton} type="button" onClick={() => { setImportFailures([]); setNotice(''); setCameraOpen(true) }} disabled={isBusy || cameraOpen} aria-haspopup="dialog" className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:cursor-wait disabled:opacity-50 sm:px-5 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5Z" />
             <circle cx="12" cy="13" r="4" />
@@ -123,12 +154,12 @@ export default function App() {
           Take an image
         </button>
         <span className="h-6 w-px shrink-0 bg-black/10 dark:bg-white/10" aria-hidden="true" />
-        <input ref={fileInput} type="file" accept="image/*" aria-label="Receipt image" onChange={uploadImage} disabled={isBusy || cameraOpen} hidden />
+        <input ref={fileInput} type="file" accept="image/*" multiple aria-label="Receipt images" onChange={uploadImage} disabled={isBusy || cameraOpen} hidden />
         <button type="button" onClick={() => fileInput.current?.click()} disabled={isBusy || cameraOpen} aria-busy={isBusy} className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:cursor-wait disabled:opacity-50 sm:px-5 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
           </svg>
-          Upload file
+          Upload files
         </button>
       </div>
       <input ref={cameraPhotoInput} type="file" accept="image/*" capture="environment" aria-label="Camera photo" onChange={uploadImage} disabled={isBusy} hidden />
@@ -139,14 +170,25 @@ export default function App() {
         </div>
         <button type="submit" disabled={isBusy || cameraOpen || !receiptUrl.trim()} className="min-h-11 rounded-xl bg-violet-700 px-5 text-sm font-medium text-white transition-colors hover:bg-violet-800 disabled:cursor-default disabled:opacity-50 dark:bg-violet-500 dark:hover:bg-violet-600">Import receipt</button>
       </form>
-      <p role="status" className="empty:hidden text-center text-sm text-black/60 dark:text-white/60">
+      <p role="status" className="w-full max-w-xl wrap-anywhere empty:hidden text-center text-sm text-black/60 dark:text-white/60">
         {phase === 'scanning' ? 'Reading barcode…' : phase === 'loading' ? 'Loading receipt…' : notice}
+        {fileProgress && ` File ${fileProgress.current} of ${fileProgress.total}: ${fileProgress.filename}`}
       </p>
-      {uploadError && <p role="alert" className="max-w-sm text-center text-sm text-red-700 dark:text-red-300">{uploadError}</p>}
-      {failedReceiptUrl && (
-        <a href={failedReceiptUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-violet-700 underline underline-offset-4 dark:text-violet-300">
-          Open original receipt
-        </a>
+      {importFailures.length > 0 && (
+        <div role="alert" className="w-full max-w-xl wrap-anywhere text-sm text-red-700 dark:text-red-300">
+          <ul className="space-y-3">
+            {importFailures.map((failure, index) => (
+              <li key={index}>
+                <p>{failure.filename && <strong>{failure.filename}: </strong>}{failure.message}</p>
+                {failure.sourceUrl && (
+                  <a href={failure.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-violet-700 underline underline-offset-4 dark:text-violet-300">
+                    Open original receipt
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
       <ReceiptTable receipts={receipts} />
       {cameraOpen && <CameraScanner onScan={importCameraReceipt} onTakePhoto={() => {

@@ -3,17 +3,16 @@ import type { Column, Worksheet } from 'exceljs'
 import type { Receipt } from '../types/receipt'
 
 const moneyFormat = '#,##0.00'
-const dateFormat = 'dd.mm.yyyy hh:mm:ss'
+const dateFormat = 'dd.mm.yyyy'
 const bishkekDate = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Bishkek', year: 'numeric', month: '2-digit', day: '2-digit',
-  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
 })
 
-// Excel dates have no time zone. Store Bishkek wall time regardless of the device's zone.
+// Excel dates have no time zone. Store the Bishkek calendar date at midnight.
 function excelDate(value: string): Date {
   const parts = bishkekDate.formatToParts(new Date(value))
   const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((entry) => entry.type === type)!.value)
-  return new Date(Date.UTC(part('year'), part('month') - 1, part('day'), part('hour'), part('minute'), part('second')))
+  return new Date(Date.UTC(part('year'), part('month') - 1, part('day')))
 }
 
 function formatSheet(sheet: Worksheet, columns: Partial<Column>[]) {
@@ -47,7 +46,8 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
   workbook.creator = 'Receipt collector'
   const summary = workbook.addWorksheet('Receipts')
   formatSheet(summary, [
-    { header: 'Date (Bishkek)', key: 'date', width: 24, style: { numFmt: dateFormat } },
+    { header: 'Date (Bishkek)', key: 'date', width: 18, style: { numFmt: dateFormat } },
+    { header: 'Чек №', key: 'ticketNumber', width: 18, style: { numFmt: '@' } },
     { header: 'Merchant', key: 'merchant', width: 34 },
     { header: 'Address', key: 'address', width: 44 },
     { header: 'Total amount (сом)', key: 'total', width: 20, style: { numFmt: moneyFormat } },
@@ -61,7 +61,8 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
   const items = workbook.addWorksheet('Purchased items')
   formatSheet(items, [
     { header: 'Receipt ID', key: 'id', width: 38, style: { numFmt: '@' } },
-    { header: 'Date (Bishkek)', key: 'date', width: 24, style: { numFmt: dateFormat } },
+    { header: 'Date (Bishkek)', key: 'date', width: 18, style: { numFmt: dateFormat } },
+    { header: 'Чек №', key: 'ticketNumber', width: 18, style: { numFmt: '@' } },
     { header: 'Merchant', key: 'merchant', width: 34 },
     { header: 'Item', key: 'item', width: 54 },
     { header: 'Quantity', key: 'quantity', width: 14, style: { numFmt: '0.########' } },
@@ -71,7 +72,7 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
   for (const receipt of receipts) {
     const date = excelDate(receipt.dateTime)
     summary.addRow({
-      date, merchant: receipt.merchant, address: receipt.merchantAddress,
+      date, ticketNumber: receipt.ticketNumber, merchant: receipt.merchant, address: receipt.merchantAddress,
       total: receipt.totalAmountMinor / 100,
       vat: receipt.vatAmountMinor === null ? null : receipt.vatAmountMinor / 100,
       tin: receipt.tin, kkm: receipt.kkmNumber, fm: receipt.fmNumber,
@@ -80,7 +81,7 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
     })
     for (const item of receipt.items) {
       items.addRow({
-        id: receipt.id, date, merchant: receipt.merchant, item: item.name,
+        id: receipt.id, date, ticketNumber: receipt.ticketNumber, merchant: receipt.merchant, item: item.name,
         quantity: item.quantity, price: item.unitPriceMinor / 100, total: item.totalAmountMinor / 100,
       })
     }

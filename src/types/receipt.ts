@@ -10,6 +10,7 @@ export interface Receipt {
   sourceUrl: string
   importedAt: string
   dateTime: string
+  ticketNumber: string | null
   merchant: string
   merchantAddress: string | null
   totalAmountMinor: number

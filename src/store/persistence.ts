@@ -43,6 +43,7 @@ function parseReceipt(value: unknown): Receipt | null {
     !Number.isFinite(Date.parse(value.importedAt)) ||
     !isText(value.dateTime) ||
     !Number.isFinite(Date.parse(value.dateTime)) ||
+    !(value.ticketNumber == null || (typeof value.ticketNumber === 'string' && /^\d+$/.test(value.ticketNumber))) ||
     !isText(value.merchant) ||
     !(value.merchantAddress === null || typeof value.merchantAddress === 'string') ||
     !isMinorAmount(value.totalAmountMinor) ||
@@ -72,6 +73,8 @@ function parseReceipt(value: unknown): Receipt | null {
     sourceUrl: value.sourceUrl,
     importedAt: value.importedAt,
     dateTime: value.dateTime,
+    // Older saved receipts did not include the number; reimporting fills it in.
+    ticketNumber: typeof value.ticketNumber === 'string' ? value.ticketNumber : null,
     merchant: value.merchant,
     merchantAddress: value.merchantAddress,
     totalAmountMinor: value.totalAmountMinor,

@@ -112,8 +112,10 @@ function receiptLink(codes: DetectedCode[]): string {
 /** Prepares a local QR reader once and reuses its canvas for live camera frames. */
 export async function createReceiptFrameReader(): Promise<(video: HTMLVideoElement) => Promise<string | null>> {
   const canvas = document.createElement('canvas')
+  const snapshot = document.createElement('canvas')
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  if (!context) {
+  const snapshotContext = snapshot.getContext('2d')
+  if (!context || !snapshotContext) {
     throw new Error('Your browser could not read the camera image. Please try another browser.')
   }
 
@@ -127,25 +129,36 @@ export async function createReceiptFrameReader(): Promise<(video: HTMLVideoEleme
     if (!nativeDetector) throw new Error('The QR reader could not start. Reload the page and try again.')
   }
 
+  let frameNumber = 0
   return async (video) => {
     const width = video.videoWidth
     const height = video.videoHeight
     if (video.readyState < 2 || !width || !height) return null
 
     const detectedCodes: DetectedCode[] = []
+    // Freeze one frame before async decoding; combining coordinates from a
+    // moving camera could otherwise confuse a receipt QR with a promotion.
+    if (snapshot.width !== width) snapshot.width = width
+    if (snapshot.height !== height) snapshot.height = height
+    snapshotContext.drawImage(video, 0, 0, width, height)
     // Dense receipt QRs lose modules when an entire tall camera frame is reduced.
     // Also inspect an overlapping lower region at greater detail, then compare
     // all detections in the original frame so the bottom receipt code still wins.
+    // Alternate scales across frames: printed dots and camera resampling can
+    // merge QR modules at one scale while leaving them readable at another.
+    const fullFrameSizes = [1800, 1450, 1280]
     const regions = [
-      { x: 0, y: 0, width, height, maxSide: 1400 },
+      { x: 0, y: 0, width, height, maxSide: fullFrameSizes[frameNumber++ % fullFrameSizes.length] },
       { x: 0, y: height * 0.4, width, height: height * 0.6, maxSide: 1800 },
     ]
     for (const region of regions) {
       const scale = Math.min(1, region.maxSide / Math.max(region.width, region.height))
       canvas.width = Math.max(1, Math.round(region.width * scale))
       canvas.height = Math.max(1, Math.round(region.height * scale))
+      context.imageSmoothingQuality = 'high'
+      let wasmReadFailed = false
       try {
-        context.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height)
+        context.drawImage(snapshot, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height)
         if (wasmAvailable) {
           const codes = await readBarcodes(context.getImageData(0, 0, canvas.width, canvas.height), {
             formats: ['QRCode'], tryHarder: true, tryDenoise: true, returnErrors: true,
@@ -153,6 +166,7 @@ export async function createReceiptFrameReader(): Promise<(video: HTMLVideoEleme
           appendCodes(codes, detectedCodes, region, canvas)
         }
       } catch {
+        wasmReadFailed = true
         if (!nativeDetector) throw new Error('The camera QR reader stopped working. Close the camera and try again.')
       }
       if (nativeDetector) {
@@ -172,7 +186,7 @@ export async function createReceiptFrameReader(): Promise<(video: HTMLVideoEleme
           }
         } catch {
           nativeDetector = null
-          if (!wasmAvailable) throw new Error('The camera QR reader stopped working. Close the camera and try again.')
+          if (!wasmAvailable || wasmReadFailed) throw new Error('The camera QR reader stopped working. Close the camera and try again.')
         }
       }
     }
