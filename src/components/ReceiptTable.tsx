@@ -56,7 +56,7 @@ export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
           </thead>
           <tbody>
             {!receipts.length && (
-              <tr><td colSpan={10} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Upload a receipt image or paste its link to add the receipt here.</td></tr>
+              <tr><td colSpan={10} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
             )}
             {receipts.map((receipt) => (
               <Fragment key={receipt.id}>

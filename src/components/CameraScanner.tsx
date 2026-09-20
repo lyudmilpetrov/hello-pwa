@@ -18,7 +18,12 @@ function cameraError(error: unknown): string {
   return error instanceof Error ? error.message : 'The camera could not start. Please try again.'
 }
 
-export function CameraScanner({ onClose }: { onClose: () => void }) {
+type CameraScannerProps = {
+  onClose: () => void
+  onScan: (url: string) => void
+}
+
+export function CameraScanner({ onClose, onScan }: CameraScannerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const [attempt, setAttempt] = useState(0)
@@ -113,9 +118,9 @@ export function CameraScanner({ onClose }: { onClose: () => void }) {
             const url = await readFrame(video)
             if (!active) return
             if (url) {
-              setStatus('QR code found. Opening website…')
+              setStatus('QR code found. Loading receipt…')
               stop()
-              window.location.assign(url)
+              onScan(url)
               return
             }
             // Decode one frame at a time and give the camera/UI time to update.
@@ -141,7 +146,7 @@ export function CameraScanner({ onClose }: { onClose: () => void }) {
       window.removeEventListener('pageshow', resumeFromHistory)
       document.removeEventListener('visibilitychange', pauseWhenHidden)
     }
-  }, [attempt])
+  }, [attempt, onScan])
 
   return (
     <dialog
@@ -153,7 +158,7 @@ export function CameraScanner({ onClose }: { onClose: () => void }) {
     >
       <h1 id="camera-title" className="text-lg font-semibold">Scan receipt</h1>
       <p id="camera-help" className="mt-2 text-sm text-black/60 dark:text-white/60">
-        Point your camera at the receipt’s bottom QR code. Its website will open automatically.
+        Hold steady with the receipt’s bottom QR code fully visible. Receipt details will be added to your table automatically.
       </p>
       <div className="mt-4 overflow-hidden rounded-xl bg-black">
         <video ref={videoRef} aria-label="Camera preview" autoPlay muted playsInline className="aspect-[4/3] max-h-[45svh] w-full object-contain" />

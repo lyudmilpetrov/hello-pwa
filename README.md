@@ -1,6 +1,8 @@
 # Hello PWA
 
-A receipt collector built with React, TypeScript, Redux Toolkit, Tailwind CSS, and Vite. Upload an image containing a Kyrgyz tax receipt QR code or paste its receipt link to import the receipt into the table.
+A receipt collector built with React, TypeScript, Redux Toolkit, Tailwind CSS, and Vite. Scan a Kyrgyz tax receipt QR code with **Take an image**, upload a receipt image, or paste its link to import the receipt into the table.
+
+Camera scans and uploaded images use the same import process: decode the QR link, fetch the receipt through the app's receipt API, extract its fields, and save it to the table and Redux store without leaving the app. The camera stops as soon as a link is detected. If fetching fails, the detected link stays in the input so **Import receipt** can retry without another scan. **View receipt** opens the original receipt website when needed.
 
 The table shows the receipt date/time, merchant, total amount, VAT (НДС), ИНН, ККМ, ФМ, ФПД, ФД, and expandable purchased items. Amounts are stored as integer minor units; dates display in Bishkek time and fiscal identifiers retain their leading zeros. Redux keeps the imported receipts, with versioned localStorage persistence for refresh/offline viewing. Reimporting the same receipt updates its row.
 
@@ -73,7 +75,7 @@ Workflow setup follows the [Vite GitHub Pages guide](https://vite.dev/guide/stat
 - `src/lib/receiptData.ts`: validates and normalizes the tax service response. VAT comes only from VAT counters; sales tax is separate, and missing VAT remains unknown rather than being replaced with zero.
 - `src/store/`: typed Redux store, duplicate-safe receipt updates, and validated localStorage persistence under `taxes.receipts.v1`.
 - `server/`: receipt JSON retrieval and production static server. Receipt requests accept only the fixed tax receipt host/path and its known parameters, with bounded sizes/timeouts and no redirects.
-- `src/components/CameraScanner.tsx`: inline camera dialog. It prefers the rear camera, continuously scans with bundled ZXing, then stops the camera and opens the decoded HTTP(S) website in the current tab. Cancel/Escape, backgrounding, failure, and page exit release camera tracks; permission failures support retry. Camera access requires HTTPS or localhost.
+- `src/components/CameraScanner.tsx`: inline camera dialog. It prefers the rear camera, continuously scans with bundled ZXing, then stops the camera and passes the decoded link to the shared receipt importer. Cancel/Escape, backgrounding, failure, and page exit release camera tracks; permission failures support retry. Camera access requires HTTPS or localhost.
 - `src/lib/receiptBarcode.ts`: local QR decoding and website URL validation. Images are processed in the browser without uploading them to a server. When a photo contains two QR codes, the scanner uses the bottom code for the fiscal receipt. If that code cannot be read or does not contain an HTTP or HTTPS website link, it shows an error instead of opening the promotional code above it.
 - `src/styles.css`: Tailwind import, dark variant, and global styles.
 - `vite.config.ts`: PWA name, metadata, icons, and caching.
