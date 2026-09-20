@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 const RECEIPT_ENDPOINT = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket'
 const QUERY_KEYS = ['date', 'sum', 'fn_number', 'regNumber', 'tin', 'type', 'operation_type', 'fd_number', 'fm']
-const RECEIPT_METADATA_KEYS = ['date', 'sum', 'operation_type']
 const MAX_REQUEST_BYTES = 8192
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
@@ -40,13 +39,9 @@ export function normalizeReceiptUrl(value: unknown): string {
   if ([...url.searchParams.keys()].some((key) => !QUERY_KEYS.includes(key))) {
     throw new ApiError(400, 'The receipt link contains unsupported parameters.')
   }
-  // Short links omit all three metadata fields. Partially supplied metadata still
-  // requires the full format, preserving validation of existing receipt links.
-  const isShortLink = RECEIPT_METADATA_KEYS.every((key) => !url.searchParams.has(key))
   // Rebuild from a fixed destination; incoming identifiers keep their leading zeros.
   const normalized = new URL(RECEIPT_ENDPOINT)
   for (const key of QUERY_KEYS) {
-    if (isShortLink && RECEIPT_METADATA_KEYS.includes(key)) continue
     const values = url.searchParams.getAll(key)
     const valid = key === 'date' ? /^\d{8}T\d{6}$/ : /^\d{1,32}$/
     if (values.length !== 1 || !valid.test(values[0])) {

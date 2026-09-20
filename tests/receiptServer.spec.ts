@@ -4,7 +4,6 @@ import { createReceiptServer } from '../backend/src/index.ts'
 import { normalizeReceiptUrl } from '../backend/src/receiptApi.ts'
 
 const receiptUrl = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?date=20260917T175623&sum=91950&fn_number=0000000002369707&regNumber=0000000000229871&tin=01007200310037&type=3&operation_type=1&fd_number=172045&fm=254486752077560'
-const shortReceiptUrl = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?type=3&fn_number=0000000002420437&fd_number=23086&fm=56512701996055&tin=01007200310037&regNumber=0000000000293799'
 const receipt = { id: 'example-receipt', ticketTotalSum: 91950, items: [{ goodName: 'Test item', goodQuantity: 1, goodCost: 91950 }] }
 const successfulFetch: typeof fetch = async () => Response.json(receipt)
 
@@ -46,54 +45,6 @@ test('receipt API upgrades HTTP and preserves receipt identifiers without follow
   })
   expect(requestedUrl).toBe(receiptUrl)
   expect(redirectMode).toBe('manual')
-})
-
-for (const protocol of ['https:', 'http:']) {
-  test(`receipt API accepts a six-parameter ${protocol} link and requests JSON`, async () => {
-    let requestedUrl = ''
-    let requestOptions: RequestInit | undefined
-    await withServer({ fetchImpl: async (input, options) => {
-      requestedUrl = String(input)
-      requestOptions = options
-      return Response.json(receipt)
-    } }, async (baseUrl) => {
-      const response = await post(baseUrl, { url: shortReceiptUrl.replace('https:', protocol) })
-      expect(response.status).toBe(200)
-      expect(await response.json()).toEqual(receipt)
-      expect(response.headers.get('cache-control')).toBe('no-store')
-    })
-    expect(requestedUrl).toBe('https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?fn_number=0000000002420437&regNumber=0000000000293799&tin=01007200310037&type=3&fd_number=23086&fm=56512701996055')
-    expect(requestOptions?.method).toBe('GET')
-    expect(new Headers(requestOptions?.headers).get('Accept')).toBe('application/json')
-    expect(requestOptions?.redirect).toBe('manual')
-  })
-}
-
-test('short receipt links still require each identifier exactly once with a valid value', () => {
-  for (const [key, value] of new URL(shortReceiptUrl).searchParams) {
-    const missing = new URL(shortReceiptUrl)
-    missing.searchParams.delete(key)
-    expect(() => normalizeReceiptUrl(missing.href), `missing ${key}`).toThrow()
-
-    const duplicate = new URL(shortReceiptUrl)
-    duplicate.searchParams.append(key, value)
-    expect(() => normalizeReceiptUrl(duplicate.href), `duplicate ${key}`).toThrow()
-
-    for (const invalid of ['', '-1', 'abc', '1'.repeat(33)]) {
-      const malformed = new URL(shortReceiptUrl)
-      malformed.searchParams.set(key, invalid)
-      expect(() => normalizeReceiptUrl(malformed.href), `invalid ${key}: ${invalid}`).toThrow()
-    }
-  }
-  expect(() => normalizeReceiptUrl(`${shortReceiptUrl}&unexpected=1`)).toThrow()
-})
-
-test('receipt links reject all partially supplied metadata combinations', () => {
-  const metadata = ['date=20260829T154846', 'sum=295864', 'operation_type=1']
-  for (const indices of [[0], [1], [2], [0, 1], [0, 2], [1, 2]]) {
-    const partial = indices.map((index) => metadata[index]).join('&')
-    expect(() => normalizeReceiptUrl(`${shortReceiptUrl}&${partial}`), partial).toThrow()
-  }
 })
 
 test('receipt URL validation rejects arbitrary destinations and malformed parameters', () => {

@@ -1,11 +1,9 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import QRCode from 'qrcode'
-import { createReceiptServer } from '../backend/src/index.ts'
 
 const receiptUrl = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?date=20260917T175623&sum=91950&fn_number=000000000000002&regNumber=000000000000003&tin=00000000000001&type=3&operation_type=1&fd_number=172045&fm=000000000000004'
 const promotionUrl = 'https://promotion.example.test/'
@@ -222,64 +220,6 @@ test('imports all receipt fields and purchased items into Redux and durable stor
   expect(saved.receipts[0].items).toHaveLength(3)
   await page.reload()
   await expect(page.getByRole('cell', { name: 'Sample Market 1 Example Street, Bishkek' })).toBeVisible()
-})
-
-test('pasted short receipt links import through backend validation and persist the returned receipt', async ({ page, baseURL }) => {
-  const shortUrl = new URL(receiptUrl)
-  for (const key of ['date', 'sum', 'operation_type']) shortUrl.searchParams.delete(key)
-  const requestedUrls: string[] = []
-  const server = createReceiptServer({
-    basePath: '/',
-    allowedOrigins: [new URL(baseURL!).origin],
-    fetchImpl: async (input) => {
-      requestedUrls.push(String(input))
-      return Response.json(receiptFixture)
-    },
-  })
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', resolve)
-  })
-  try {
-    const apiUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/receipts`
-    // Exercise the real API validation; only the upstream tax response is a fixture.
-    await page.route('**/api/receipts', async (route) => {
-      expect(route.request().postDataJSON()).toEqual({ url: shortUrl.href })
-      await route.fulfill({ response: await route.fetch({ url: apiUrl }) })
-    })
-    await page.goto('./')
-    await page.getByLabel('Or paste a receipt link').fill(shortUrl.href)
-    await page.getByRole('button', { name: 'Import receipt', exact: true }).click()
-    await expect(page.getByRole('status')).toHaveText('Receipt added.')
-    expect(requestedUrls).toEqual([shortUrl.href])
-    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('taxes.receipts.v1')!))
-    expect(saved.receipts).toHaveLength(1)
-    expect(saved.receipts[0]).toMatchObject({
-      sourceUrl: shortUrl.href,
-      dateTime: '2026-09-17T11:56:23.000Z',
-      ticketNumber: '191',
-      totalAmountMinor: 91950,
-      vatAmountMinor: 9765,
-      items: [
-        { name: 'Shaving foam', quantity: 1, unitPriceMinor: 29990, totalAmountMinor: 29990 },
-        { name: 'Paper roll', quantity: 3, unitPriceMinor: 16990, totalAmountMinor: 50970 },
-        { name: 'Razor', quantity: 1, unitPriceMinor: 10990, totalAmountMinor: 10990 },
-      ],
-    })
-    await page.reload()
-    await expect(page.getByRole('table', { name: 'Imported receipt information', exact: true }).locator('time')).toHaveText('17.09.2026')
-    for (const value of ['191', '919,50', '97,65']) {
-      await expect(page.getByRole('cell', { name: value, exact: true })).toBeVisible()
-    }
-    await expect(page.getByRole('link', { name: 'View receipt' })).toHaveAttribute('href', shortUrl.href)
-    await page.getByText('Purchased items (3)', { exact: true }).click()
-    for (const name of ['Shaving foam', 'Paper roll', 'Razor']) {
-      await expect(page.getByRole('cell', { name, exact: true })).toBeVisible()
-    }
-  } finally {
-    server.closeAllConnections()
-    await new Promise<void>((resolve) => server.close(() => resolve()))
-  }
 })
 
 test('reimport updates the existing receipt instead of adding a duplicate', async ({ page }) => {
