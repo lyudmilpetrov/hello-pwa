@@ -62,6 +62,9 @@ export function ReceiptTable({ receipts, merchants, onClearMemory, clearDisabled
         </button>
         </div>
       </div>
+      <p className="mb-4 text-sm leading-relaxed text-black/60 dark:text-white/60">
+        All information is stored in your browser using Local Storage. Data stays there <strong>forever</strong> until <strong>you delete it</strong> using the Clear Memory button, which removes your stored receipts.
+      </p>
       {exportError && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">{exportError}</p>}
       <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1e1e25]">
         <table className="w-full text-sm">
