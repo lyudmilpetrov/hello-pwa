@@ -51,7 +51,8 @@ Workflow setup follows the [Vite GitHub Pages guide](https://vite.dev/guide/stat
 
 ## Customize
 
-- `src/App.tsx`: centered action bar with camera and upload icons. Each button logs its label to the browser console.
+- `src/App.tsx`: centered action bar with camera and upload icons. Upload file selects a receipt image, reads its QR code, and opens the website in the current tab. The camera button is still a placeholder.
+- `src/lib/receiptBarcode.ts`: local QR decoding and website URL validation. Images are processed in the browser without uploading them to a server. When a photo contains two QR codes, the scanner uses the bottom code for the fiscal receipt. If that code cannot be read or does not contain an HTTP or HTTPS website link, it shows an error instead of opening the promotional code above it.
 - `src/styles.css`: Tailwind import, dark variant, and global styles.
 - `vite.config.ts`: PWA name, metadata, icons, and caching.
 - `public/`: favicon and installation icons.
@@ -65,7 +66,7 @@ npx playwright install chromium
 npm test
 ```
 
-The browser checks cover persisted themes, a narrow mobile viewport, the manifest and icons, and an offline reload of the production build.
+The browser checks cover persisted themes, a narrow mobile viewport, the manifest and icons, an offline reload of the production build, and image upload with real QR decoding and navigation. Upload checks also cover invalid links, unreadable images, retries, and selecting the bottom QR when two codes appear in the photo, including refusing the promotional link when the bottom code is not a website. Tests automatically discover every JPG, JPEG, PNG, and WebP file directly inside `samples/` and check that each opens a fiscal receipt on `tax.salyk.kg`. These local photo checks are omitted when no supported samples are present. Tests intercept receipt navigation so they do not contact external receipt websites.
 
 To use an existing Edge installation instead of downloading Chromium, run this in PowerShell:
 
