@@ -21,12 +21,32 @@ export async function loadReceipt(sourceUrl: string): Promise<unknown> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 25000)
   try {
+    console.log('[Receipt import] Request', {
+      pageUrl: window.location.href,
+      endpoint: new URL(endpoint, window.location.href).href,
+      method: 'POST',
+      sourceUrl,
+    })
     const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: sourceUrl }),
       signal: controller.signal,
     })
+    console.log('[Receipt import] Response', {
+      url: response.url,
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      type: response.type,
+      redirected: response.redirected,
+      headers: Object.fromEntries(response.headers.entries()),
+    })
+    // Read a copy so diagnostics do not consume the receipt parser's response.
+    void response.clone().text().then(
+      (body) => console.log('[Receipt import] Response body', body),
+      (error) => console.log('[Receipt import] Could not read response body', error),
+    )
     const isJson = /(?:application\/json|\+json)(?:;|$)/i.test(response.headers.get('content-type') ?? '')
     // Static hosts return an HTML 404/405 (or the app shell) for a missing API.
     // That means the QR was read successfully; changing cameras cannot fix it.
@@ -43,6 +63,7 @@ export async function loadReceipt(sourceUrl: string): Promise<unknown> {
     if (!data) throw new Error('The receipt service returned an unreadable response. Please try again or open the original receipt below.')
     return data
   } catch (error) {
+    console.log('[Receipt import] Failed', { endpoint, sourceUrl, aborted: controller.signal.aborted, error })
     if (controller.signal.aborted) throw new Error('The receipt website took too long to respond. Please try again.')
     if (error instanceof TypeError) throw new Error('Could not reach the receipt service. Check your connection and try again.')
     throw error
