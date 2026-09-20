@@ -8,6 +8,7 @@ export interface ReceiptItem {
 export interface Receipt {
   id: string
   sourceUrl: string
+  feed?: string
   importedAt: string
   dateTime: string
   ticketNumber: string | null

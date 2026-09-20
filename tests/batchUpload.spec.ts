@@ -72,10 +72,11 @@ test('selects multiple images, persists each receipt and allows the same batch t
 
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('taxes.receipts.v1')!))
   expect(saved.receipts).toHaveLength(2)
-  for (const { url, data } of receipts) {
+  for (const [index, { url, data }] of receipts.entries()) {
     expect(saved.receipts).toContainEqual(expect.objectContaining({
       id: data.id,
       sourceUrl: url,
+      feed: `File - ${files[index].name}`,
       ticketNumber: String(data.ticketNumber),
       fdNumber: String(data.fdNumber),
       merchant: data.crData.locationName,
@@ -91,8 +92,10 @@ test('selects multiple images, persists each receipt and allows the same batch t
   }
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Receipts (2)', exact: true })).toBeVisible()
-  for (const { data } of receipts) {
-    await expect(page.getByRole('cell', { name: `${data.crData.locationName} 1 Example Street, Bishkek`, exact: true })).toBeVisible()
+  for (const [index, { data }] of receipts.entries()) {
+    const merchant = page.getByRole('cell', { name: `${data.crData.locationName} 1 Example Street, Bishkek`, exact: true })
+    await expect(merchant).toBeVisible()
+    await expect(page.getByRole('row').filter({ has: merchant }).getByRole('cell', { name: `File - ${files[index].name}`, exact: true })).toBeVisible()
   }
   await expect(page.getByRole('link', { name: 'View receipt', exact: true })).toHaveCount(2)
 })

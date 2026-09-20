@@ -230,6 +230,7 @@ test('Take a photo instead releases the live camera before opening the native ph
   await expect(page.getByRole('dialog')).toHaveCount(0)
   await chooser.setFiles(photoPath)
   await expect(page.getByRole('status')).toHaveText('Receipt added.', { timeout: 45000 })
+  await expect(page.getByRole('cell', { name: 'QR Code', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Receipts (1)', exact: true })).toBeVisible()
   expect(importedUrls).toHaveLength(1)
   expect(await page.evaluate(() => window.cameraHarness.requests.length)).toBe(1)
@@ -343,7 +344,7 @@ test('camera QR stops the camera and imports the receipt once without leaving th
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('taxes.receipts.v1')!))
   expect(saved.receipts).toHaveLength(1)
   expect(saved.receipts[0]).toMatchObject({
-    sourceUrl: receiptUrl, merchant: 'Sample Market', totalAmountMinor: 91950,
+    sourceUrl: receiptUrl, feed: 'QR Code', merchant: 'Sample Market', totalAmountMinor: 91950,
     vatAmountMinor: 9765, tin: '00000000000001', fdNumber: '172045',
   })
   expect(saved.receipts[0].items).toHaveLength(3)
@@ -354,6 +355,7 @@ test('camera QR stops the camera and imports the receipt once without leaving th
   await expect(page.getByRole('heading', { name: 'Receipts (1)', exact: true })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Sample Market 1 Example Street, Bishkek' })).toBeVisible()
   await expect(page.getByRole('cell', { name: '97,65', exact: true })).toBeVisible()
+  await expect(page.getByRole('cell', { name: 'QR Code', exact: true })).toBeVisible()
   expect(imports).toBe(1)
 })
 
@@ -387,6 +389,7 @@ test('a failed camera import keeps its link for retry without scanning again', a
   await expect(page.getByLabel('Or paste a receipt link')).toHaveValue('')
   expect(await page.evaluate(() => window.cameraHarness.requests.length)).toBe(1)
   expect(attempts).toBe(2)
+  await expect(page.getByRole('cell', { name: 'QR Code', exact: true })).toBeVisible()
   await expect(page).toHaveURL(appUrl)
   expect(context.pages()).toHaveLength(1)
 })

@@ -14,8 +14,8 @@ type Theme = 'light' | 'dark'
 const releaseTimestamp = import.meta.env.VITE_RELEASE_TIMESTAMP
 const releaseVersion = releaseTimestamp.slice(0, 19).replace('T', ':')
 
-type ReceiptSource = { getUrl: () => Promise<string>; filename?: string }
-type ImportFailure = { filename?: string; message: string; sourceUrl: string | null }
+type ReceiptSource = { getUrl: () => Promise<string>; feed: string; filename?: string }
+type ImportFailure = { filename?: string; feed: string; message: string; sourceUrl: string | null }
 type FileProgress = { current: number; total: number; filename: string }
 
 function readPreference(): Theme | null {
@@ -96,12 +96,13 @@ export default function App() {
           setReceiptUrl(url)
           setPhase('loading')
           const receipt = parseReceipt(await loadReceipt(url), url)
-          dispatch(receiptAdded(receipt))
+          dispatch(receiptAdded({ ...receipt, feed: source.feed }))
           imported += 1
           setReceiptUrl('')
         } catch (error) {
           failures.push({
             filename: source.filename,
+            feed: source.feed,
             sourceUrl,
             message: error instanceof Error ? error.message : 'Could not import this receipt. Please try again.',
           })
@@ -125,23 +126,26 @@ export default function App() {
 
   const importCameraReceipt = useCallback(async (url: string) => {
     setCameraOpen(false)
-    await importReceipts([{ getUrl: async () => url }], false)
+    await importReceipts([{ getUrl: async () => url, feed: 'QR Code' }], false)
     requestAnimationFrame(() => cameraButton.current?.focus())
   }, [importReceipts])
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.currentTarget.files ?? [])
+    const fromCamera = event.currentTarget === cameraPhotoInput.current
     // Snapshot the FileList before resetting so the same selection can be retried.
     event.currentTarget.value = ''
     if (!cameraOpen) await importReceipts(files.map((file) => ({
       filename: file.name,
+      feed: fromCamera ? 'QR Code' : `File - ${file.name}`,
       getUrl: () => readReceiptUrl(file),
     })), true)
   }
 
   async function submitReceiptUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (receiptUrl.trim() && !cameraOpen) await importReceipts([{ getUrl: async () => receiptUrl }], false)
+    const feed = importFailures.find((failure) => failure.sourceUrl === receiptUrl.trim())?.feed ?? 'Link'
+    if (receiptUrl.trim() && !cameraOpen) await importReceipts([{ getUrl: async () => receiptUrl, feed }], false)
   }
 
   useEffect(() => {

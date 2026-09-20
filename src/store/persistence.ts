@@ -71,6 +71,7 @@ function parseReceipt(value: unknown): Receipt | null {
   return {
     id: value.id,
     sourceUrl: value.sourceUrl,
+    ...(isText(value.feed) ? { feed: value.feed } : {}),
     importedAt: value.importedAt,
     dateTime: value.dateTime,
     // Older saved receipts did not include the number; reimporting fills it in.

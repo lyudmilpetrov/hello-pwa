@@ -65,14 +65,14 @@ export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
           <caption className="sr-only">Imported receipt information</caption>
           <thead className="border-b border-black/10 bg-black/[0.025] text-xs text-black/60 dark:border-white/10 dark:bg-white/[0.025] dark:text-white/60">
             <tr>
-              {['Date', 'Чек №', 'Merchant', 'Total amount', 'НДС amount', 'ИНН', 'ККМ №', 'ФМ №', 'ФПД', 'ФД №', 'Source'].map((heading) => (
+              {['Date', 'Чек №', 'Merchant', 'Total amount', 'НДС amount', 'ИНН', 'ККМ №', 'ФМ №', 'ФПД', 'ФД №', 'Source', 'Feed'].map((heading) => (
                 <th key={heading} scope="col" className="whitespace-nowrap px-4 py-3 text-left font-medium">{heading}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {!receipts.length && (
-              <tr><td colSpan={11} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
+              <tr><td colSpan={12} className="px-6 py-12 text-center text-black/50 dark:text-white/50">Scan a receipt with your camera, upload an image, or paste its link to add it here.</td></tr>
             )}
             {receipts.map((receipt) => (
               <Fragment key={receipt.id}>
@@ -91,9 +91,10 @@ export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
                   <td className={numberCell}>{receipt.fpd}</td>
                   <td className={numberCell}>{receipt.fdNumber}</td>
                   <td className={cell}><a href={receipt.sourceUrl} target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-violet-700 underline underline-offset-4 dark:text-violet-300">View receipt</a></td>
+                  <td className={`${cell} min-w-40 wrap-anywhere`}>{receipt.feed ?? '—'}</td>
                 </tr>
                 <tr className="border-b border-black/10 last:border-0 dark:border-white/10">
-                  <td colSpan={11} className="px-4 pb-4">
+                  <td colSpan={12} className="px-4 pb-4">
                     <details>
                       <summary className="w-fit cursor-pointer text-xs text-violet-700 dark:text-violet-300">Purchased items ({receipt.items.length})</summary>
                       <table className="mt-3 w-full max-w-3xl text-xs">

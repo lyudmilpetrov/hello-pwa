@@ -64,6 +64,18 @@ test('restores older receipts without a number and fills it in on reimport', () 
   expect(state.items[0].ticketNumber).toBe(ticketNumber)
 })
 
+test('retains import feeds across reloads while accepting legacy receipts', () => {
+  const storage = memoryStorage()
+  const originals = [
+    receipt({ id: 'camera', feed: 'QR Code' }),
+    receipt({ id: 'file', feed: 'File - чек 01.png' }),
+    receipt({ id: 'link', feed: 'Link' }),
+    receipt({ id: 'legacy' }),
+  ]
+  saveReceipts(storage, originals)
+  expect(loadReceipts(storage)).toEqual(originals)
+})
+
 test('filters corrupt dates per receipt without discarding valid neighboring records', () => {
   const storage = memoryStorage()
   const first = receipt()
