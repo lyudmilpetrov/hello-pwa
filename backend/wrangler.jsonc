@@ -7,6 +7,6 @@
   "workers_dev": true,
   "vars": {
     "BASE_PATH": "/",
-    "RECEIPT_ALLOWED_ORIGINS": "https://lyudmilpetrov.github.io"
+      "RECEIPT_ALLOWED_ORIGINS": "https://lyudmilpetrov.github.io,http://127.0.0.1:5173,http://localhost:5173"
   }
 }
