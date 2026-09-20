@@ -16,12 +16,14 @@ export function normalizeReceiptUrl(value: string): string {
 }
 
 export async function loadReceipt(sourceUrl: string): Promise<unknown> {
-  const base = import.meta.env.VITE_RECEIPT_API_BASE_URL || import.meta.env.BASE_URL
+  const configuredBase = import.meta.env.VITE_RECEIPT_API_BASE_URL
+  const base = configuredBase || import.meta.env.BASE_URL
   const endpoint = `${base.replace(/\/$/, '')}/api/receipts`
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), 25000)
   try {
     console.log('[Receipt import] Request', {
+      RECEIPT_API_BASE_URL: configuredBase || '(not set; using same-origin API)',
       pageUrl: window.location.href,
       endpoint: new URL(endpoint, window.location.href).href,
       method: 'POST',
@@ -54,6 +56,7 @@ export async function loadReceipt(sourceUrl: string): Promise<unknown> {
       throw new Error('Receipt importing is not available on this website. Your receipt link was read successfully; you can open the original receipt below.')
     }
     const data: unknown = isJson ? await response.json().catch(() => null) : null
+    console.log('[Receipt import] Result', { url: response.url, status: response.status, data })
     if (!response.ok) {
       const message = data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
         ? data.error
