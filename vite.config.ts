@@ -6,6 +6,9 @@ import { configureReceiptApi } from './server/receiptApi.ts'
 
 export default defineConfig({
   base: process.env.BASE_PATH || '/',
+  define: {
+    'import.meta.env.VITE_RELEASE_TIMESTAMP': JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     configureReceiptApi(),
     react(),

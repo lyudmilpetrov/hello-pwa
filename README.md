@@ -28,6 +28,8 @@ npm run build
 npm run preview
 ```
 
+The top-right version shows the release build time in UTC as `YYYY-MM-DD:hh:mm:ss`. Vite embeds it at build time, so it stays the same across refreshes and offline use and changes with each new build.
+
 The tax receipt endpoint returns JSON and does not allow cross-origin browser requests. The app uses its own `POST /api/receipts` endpoint to retrieve that JSON. Vite development and preview servers include this endpoint. Images stay in the browser; only the decoded receipt link is sent to the app server, which fetches the fixed `tax.salyk.kg` receipt endpoint.
 
 For a production deployment with both the app and its receipt API, build and run the included Node server:

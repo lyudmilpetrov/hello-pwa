@@ -10,6 +10,9 @@ import { receiptAdded } from './store/receiptsSlice'
 
 type Theme = 'light' | 'dark'
 
+const releaseTimestamp = import.meta.env.VITE_RELEASE_TIMESTAMP
+const releaseVersion = releaseTimestamp.slice(0, 19).replace('T', ':')
+
 type ReceiptSource = { getUrl: () => Promise<string>; filename?: string }
 type ImportFailure = { filename?: string; message: string; sourceUrl: string | null }
 type FileProgress = { current: number; total: number; filename: string }
@@ -140,7 +143,10 @@ export default function App() {
   }, [dark])
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 py-10 sm:px-6">
+    <main className="mx-auto flex min-h-svh w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 pt-16 pb-10 sm:px-6">
+      <div className="absolute top-4 right-4 whitespace-nowrap text-xs text-black/55 sm:right-6 dark:text-white/55">
+        Version <time dateTime={releaseTimestamp} title="Release build time (UTC)" className="font-mono tabular-nums">{releaseVersion}</time>
+      </div>
       <header className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Receipt collector</h1>
         <p className="mt-2 text-sm text-black/55 dark:text-white/55">Keep receipt details and VAT together.</p>
