@@ -69,18 +69,14 @@ for (const protocol of ['https:', 'http:']) {
   })
 }
 
-test('short receipt links still require each identifier exactly once with a valid value', () => {
-  for (const [key, value] of new URL(shortReceiptUrl).searchParams) {
-    const missing = new URL(shortReceiptUrl)
-    missing.searchParams.delete(key)
-    expect(() => normalizeReceiptUrl(missing.href), `missing ${key}`).toThrow()
-
-    const duplicate = new URL(shortReceiptUrl)
+test('supplied receipt parameters still require exactly one valid value', () => {
+  for (const [key, value] of new URL(receiptUrl).searchParams) {
+    const duplicate = new URL(receiptUrl)
     duplicate.searchParams.append(key, value)
     expect(() => normalizeReceiptUrl(duplicate.href), `duplicate ${key}`).toThrow()
 
     for (const invalid of ['', '-1', 'abc', '1'.repeat(33)]) {
-      const malformed = new URL(shortReceiptUrl)
+      const malformed = new URL(receiptUrl)
       malformed.searchParams.set(key, invalid)
       expect(() => normalizeReceiptUrl(malformed.href), `invalid ${key}: ${invalid}`).toThrow()
     }
@@ -88,12 +84,47 @@ test('short receipt links still require each identifier exactly once with a vali
   expect(() => normalizeReceiptUrl(`${shortReceiptUrl}&unexpected=1`)).toThrow()
 })
 
-test('receipt links reject all partially supplied metadata combinations', () => {
+test('receipt API forwards supplied fields when any recognized parameter is absent', async () => {
+  const missingParameters = [...new URL(receiptUrl).searchParams.keys()]
+  let requestedUrl = ''
+  await withServer({ fetchImpl: async (input) => {
+    requestedUrl = String(input)
+    return Response.json(receipt)
+  } }, async (baseUrl) => {
+    for (const missingKey of [...missingParameters, 'all']) {
+      const partial = new URL(receiptUrl)
+      if (missingKey === 'all') partial.search = ''
+      else partial.searchParams.delete(missingKey)
+      requestedUrl = ''
+
+      const response = await post(baseUrl, { url: partial.href })
+      expect(response.status, `missing ${missingKey}`).toBe(200)
+      expect(await response.json()).toEqual(receipt)
+      expect(requestedUrl).not.toContain('undefined')
+      expect([...new URL(requestedUrl).searchParams].sort()).toEqual([...partial.searchParams].sort())
+    }
+  })
+})
+
+test('receipt API forwards all partially supplied metadata combinations', async () => {
   const metadata = ['date=20260829T154846', 'sum=295864', 'operation_type=1']
-  for (const indices of [[0], [1], [2], [0, 1], [0, 2], [1, 2]]) {
-    const partial = indices.map((index) => metadata[index]).join('&')
-    expect(() => normalizeReceiptUrl(`${shortReceiptUrl}&${partial}`), partial).toThrow()
-  }
+  let requestedUrl = ''
+  await withServer({ fetchImpl: async (input) => {
+    requestedUrl = String(input)
+    return Response.json(receipt)
+  } }, async (baseUrl) => {
+    for (const indices of [[0], [1], [2], [0, 1], [0, 2], [1, 2]]) {
+      const partial = indices.map((index) => metadata[index]).join('&')
+      const url = new URL(`${shortReceiptUrl}&${partial}`)
+      requestedUrl = ''
+
+      const response = await post(baseUrl, { url: url.href })
+      expect(response.status, partial).toBe(200)
+      expect(await response.json()).toEqual(receipt)
+      expect(requestedUrl).not.toContain('undefined')
+      expect([...new URL(requestedUrl).searchParams].sort()).toEqual([...url.searchParams].sort())
+    }
+  })
 })
 
 test('receipt URL validation rejects arbitrary destinations and malformed parameters', () => {
@@ -109,7 +140,6 @@ test('receipt URL validation rejects arbitrary destinations and malformed parame
     `${receiptUrl}#fragment`,
     `${receiptUrl}&redirect=https://127.0.0.1`,
     `${receiptUrl}&sum=1`,
-    receiptUrl.replace('&sum=91950', ''),
     receiptUrl.replace('sum=91950', 'sum=-1'),
     receiptUrl.replace('date=20260917T175623', 'date=bad-date'),
   ]) expect(() => normalizeReceiptUrl(url)).toThrow()
@@ -135,6 +165,25 @@ test('receipt API rejects malformed JSON, unexpected fields and oversized reques
     expect((await post(baseUrl, { url: receiptUrl, extra: true })).status).toBe(400)
     expect((await post(baseUrl, { url: 'x'.repeat(9000) })).status).toBe(413)
     expect((await post(baseUrl, {}, { 'Content-Type': 'text/plain' })).status).toBe(415)
+  })
+})
+
+test('receipt API accepts receipt JSON larger than the request body limit', async () => {
+  const largeReceipt = {
+    ...receipt,
+    items: Array.from({ length: 100 }, (_, index) => ({
+      ...receipt.items[0], goodName: `Test item ${index}: ${'x'.repeat(100)}`,
+    })),
+  }
+  const responseBytes = Buffer.byteLength(JSON.stringify(largeReceipt))
+  expect(Buffer.byteLength(JSON.stringify({ url: shortReceiptUrl }))).toBeLessThan(8192)
+  expect(responseBytes).toBeGreaterThan(8192)
+  expect(responseBytes).toBeLessThan(2 * 1024 * 1024)
+
+  await withServer({ fetchImpl: async () => Response.json(largeReceipt) }, async (baseUrl) => {
+    const response = await post(baseUrl, { url: shortReceiptUrl })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(largeReceipt)
   })
 })
 

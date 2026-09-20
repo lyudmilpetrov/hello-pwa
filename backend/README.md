@@ -34,7 +34,7 @@ The root development and preview commands bind the API to `127.0.0.1` with `BASE
 
 `GET /health` provides a basic service health response without contacting the tax website. `POST /api/receipts` accepts JSON with a `url` property containing a tax receipt URL. The root `/` does not serve a website.
 
-Receipt links must include `type`, `fn_number`, `fd_number`, `fm`, `tin`, and `regNumber`. Both the full format, with `date`, `sum`, and `operation_type`, and the short format, with all three omitted, are supported. Partially supplied metadata, duplicate parameters, and malformed values are rejected. Receipt details are read from the tax service's JSON response in both cases.
+Receipt links may contain any subset of the supported parameters: `date`, `sum`, `fn_number`, `regNumber`, `tin`, `type`, `operation_type`, `fd_number`, and `fm`. Only supplied parameters are forwarded; the tax service determines whether they identify a receipt. Supplied values are still validated, and duplicate or unsupported parameters are rejected. Receipt details are read from the tax service's JSON response.
 
 ## Package for Azure App Service
 

@@ -69,15 +69,30 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
     { header: 'Unit price (сом)', key: 'price', width: 20, style: { numFmt: moneyFormat } },
     { header: 'Amount (сом)', key: 'total', width: 20, style: { numFmt: moneyFormat } },
   ])
-  for (const receipt of receipts) {
+  const final = workbook.addWorksheet('Final')
+  formatSheet(final, [
+    { header: 'No.', key: 'number', width: 8 },
+    { header: 'Type of Service', key: 'service', width: 24 },
+    { header: 'Merchant-INN', key: 'merchantTin', width: 52 },
+    { header: 'Check Number', key: 'ticketNumber', width: 18, style: { numFmt: '@' } },
+    { header: 'Date', key: 'date', width: 18, style: { numFmt: dateFormat } },
+    { header: 'Total amount (сом)', key: 'total', width: 20, style: { numFmt: moneyFormat } },
+    { header: 'VAT amount (сом)', key: 'vat', width: 20, style: { numFmt: moneyFormat } },
+  ])
+  for (const [index, receipt] of receipts.entries()) {
     const date = excelDate(receipt.dateTime)
+    const total = receipt.totalAmountMinor / 100
+    const vat = receipt.vatAmountMinor === null ? null : receipt.vatAmountMinor / 100
     summary.addRow({
       date, ticketNumber: receipt.ticketNumber, merchant: receipt.merchant, address: receipt.merchantAddress,
-      total: receipt.totalAmountMinor / 100,
-      vat: receipt.vatAmountMinor === null ? null : receipt.vatAmountMinor / 100,
+      total, vat,
       tin: receipt.tin, kkm: receipt.kkmNumber, fm: receipt.fmNumber,
       fpd: receipt.fpd, fd: receipt.fdNumber, id: receipt.id,
       source: { text: 'View receipt', hyperlink: receipt.sourceUrl },
+    })
+    final.addRow({
+      number: index + 1, service: 'groceries', merchantTin: `${receipt.merchant} - ${receipt.tin}`,
+      ticketNumber: receipt.ticketNumber, date, total, vat,
     })
     for (const item of receipt.items) {
       items.addRow({
@@ -88,6 +103,19 @@ export function createReceiptWorkbook(receipts: readonly Receipt[]) {
   }
   finishSheet(summary)
   finishSheet(items)
+  finishSheet(final)
+
+  // Keep three blank rows and the signing area outside the data filter and banding.
+  const signatureRow = final.rowCount + 4
+  final.getCell(signatureRow, 2).value = "Employee's signature:"
+  final.getCell(signatureRow, 5).value = 'Date'
+  final.getCell(signatureRow + 1, 5).value = excelDate(new Date().toISOString())
+  for (const rowNumber of [signatureRow, signatureRow + 1]) {
+    final.getRow(rowNumber).eachCell((cell) => {
+      cell.font = { name: 'Calibri', size: 11, color: { argb: 'FF20202A' } }
+      cell.alignment = { vertical: 'middle', wrapText: true }
+    })
+  }
   return workbook
 }
 

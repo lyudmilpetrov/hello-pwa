@@ -43,6 +43,8 @@ export function normalizeReceiptUrl(value: unknown): string {
   const normalized = new URL(RECEIPT_ENDPOINT)
   for (const key of QUERY_KEYS) {
     const values = url.searchParams.getAll(key)
+    // Let the tax service determine whether the supplied receipt fields suffice.
+    if (values.length === 0) continue
     const valid = key === 'date' ? /^\d{8}T\d{6}$/ : /^\d{1,32}$/
     if (values.length !== 1 || !valid.test(values[0])) {
       throw new ApiError(400, 'The receipt link is missing valid receipt parameters.')

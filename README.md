@@ -12,6 +12,8 @@ The table shows the receipt date, Чек №, merchant, total amount, VAT (НД�
 
 Use **Download Excel** beside the receipt count to export all saved receipts as an `.xlsx` workbook. The Receipts sheet includes the displayed fields, address, source links, and receipt IDs; Purchased items includes every item linked to its receipt. Both sheets include Чек № and dates formatted as DD.MM.YYYY without time. Amounts are numeric values in сом, dates use the Bishkek calendar date, and fiscal identifiers remain text to preserve leading zeros. Missing VAT and receipt numbers stay blank. Export runs locally and also works offline after the production app has been cached.
 
+The Final sheet provides a simplified expense report with sequential numbering, Type of Service (defaulting to `groceries`), Merchant-INN (merchant name followed by ` - ` and ИНН), Check Number from `ticketNumber`, Date, Total amount, and VAT amount. Three blank rows separate the receipts from **Employee's signature:** in column B and **Date** in column E. The cell below Date contains the export day's Bishkek calendar date. All dates use DD.MM.YYYY, and amounts are in сом.
+
 ## Develop
 
 Use Node.js 24 or newer.

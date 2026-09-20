@@ -44,12 +44,16 @@ test('Excel round trip preserves receipt values, identifiers and item relationsh
   const second = receipt({ id: 'receipt-002', merchant: 'Другой магазин', vatAmountMinor: 0,
     ticketNumber: null, dateTime: '2026-09-17T17:59:59.000Z',
     totalAmountMinor: 12345, items: [{ name: 'Хлеб', quantity: 2, unitPriceMinor: 6172, totalAmountMinor: 12345 }] })
+  const exportDateFormat = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Bishkek' })
+  const exportDateBefore = exportDateFormat.format(new Date())
   const exported = createReceiptWorkbook([first, second])
+  const exportDateAfter = exportDateFormat.format(new Date())
   const workbook = new ExcelJS.Workbook()
   await workbook.xlsx.load(await exported.xlsx.writeBuffer())
-  expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(['Receipts', 'Purchased items'])
+  expect(workbook.worksheets.map(sheet => sheet.name)).toEqual(['Receipts', 'Purchased items', 'Final'])
   const receipts = workbook.getWorksheet('Receipts')!
   const items = workbook.getWorksheet('Purchased items')!
+  const final = workbook.getWorksheet('Final')!
   expect(receipts.rowCount).toBe(3)
   expect(items.rowCount).toBe(3)
   expect(receipts.getCell('A2').type).toBe(ExcelJS.ValueType.Date)
@@ -89,9 +93,49 @@ test('Excel round trip preserves receipt values, identifiers and item relationsh
   expect(items.getCell('F2').value).toBe(0.25)
   expect(items.getCell('G2').value).toBe(10)
   expect(items.getCell('H2').value).toBe(2.5)
+  expect(final.columnCount).toBe(7)
+  expect(final.getRow(1).values).toEqual([undefined, 'No.', 'Type of Service', 'Merchant-INN',
+    'Check Number', 'Date', 'Total amount (сом)', 'VAT amount (сом)'])
+  expect(final.getCell('A2').value).toBe(1)
+  expect(final.getCell('A3').value).toBe(2)
+  expect(final.getCell('B2').value).toBe('groceries')
+  expect(final.getCell('B3').value).toBe('groceries')
+  expect(final.getCell('C2').value).toBe(`${first.merchant} - ${first.tin}`)
+  expect(final.getCell('C2').type).toBe(ExcelJS.ValueType.String)
+  expect(final.getCell('C3').value).toBe(`${second.merchant} - ${second.tin}`)
+  expect(final.getCell('D2').value).toBe('00011677')
+  expect(final.getCell('D2').type).toBe(ExcelJS.ValueType.String)
+  expect(final.getCell('D2').numFmt).toBe('@')
+  expect(final.getCell('D3').value).toBeNull()
+  expect(final.getCell('E2').type).toBe(ExcelJS.ValueType.Date)
+  expect(final.getCell('E2').value).toEqual(receipts.getCell('A2').value)
+  expect(final.getCell('E3').value).toEqual(receipts.getCell('A3').value)
+  expect(final.getCell('E2').numFmt).toBe('dd.mm.yyyy')
+  expect(final.getCell('F2').value).toBe(2.5)
+  expect(final.getCell('F2').type).toBe(ExcelJS.ValueType.Number)
+  expect(final.getCell('F2').numFmt).toMatch(/0\.00/)
+  expect(final.getCell('F3').value).toBe(123.45)
+  expect(final.getCell('G2').value).toBeNull()
+  expect(final.getCell('G3').value).toBe(0)
+  expect(final.getCell('G3').type).toBe(ExcelJS.ValueType.Number)
+  expect(final.getCell('G3').numFmt).toMatch(/0\.00/)
+  expect(final.autoFilter).toBe('A1:G3')
+  for (const row of [4, 5, 6]) expect(final.getRow(row).actualCellCount).toBe(0)
+  expect(final.rowCount).toBe(8)
+  expect(final.getCell('B7').value).toBe("Employee's signature:")
+  expect(final.getCell('E7').value).toBe('Date')
+  expect(final.getCell('E8').type).toBe(ExcelJS.ValueType.Date)
+  expect(final.getCell('E8').numFmt).toBe('dd.mm.yyyy')
+  expect([exportDateBefore, exportDateAfter]).toContain(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC' }).format(final.getCell('E8').value as Date),
+  )
+  for (const cell of ['B7', 'E7', 'E8']) {
+    expect(final.getCell(cell).fill).not.toEqual(expect.objectContaining({ type: 'pattern', pattern: 'solid' }))
+  }
 })
 
 test('Download Excel is disabled when empty and downloads imported data on a small screen', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-09-20T21:15:00.000Z'))
   await page.setViewportSize({ width: 320, height: 568 })
   await page.goto('./')
   const button = page.getByRole('button', { name: 'Download Excel', exact: true })
@@ -114,6 +158,15 @@ test('Download Excel is disabled when empty and downloads imported data on a sma
   expect(receipts.getCell('E2').value).toBe(919.5)
   expect(receipts.getCell('F2').value).toBe(97.65)
   expect(workbook.getWorksheet('Purchased items')!.rowCount).toBe(4)
+  const final = workbook.getWorksheet('Final')!
+  expect(final.getRow(2).values).toEqual([undefined, 1, 'groceries', 'Sample Market - 00000000000001',
+    '191', new Date('2026-09-17T00:00:00.000Z'), 919.5, 97.65])
+  expect(final.getCell('B6').value).toBe("Employee's signature:")
+  expect(final.getCell('E6').value).toBe('Date')
+  expect((final.getCell('E7').value as Date).toISOString()).toBe('2026-09-21T00:00:00.000Z')
+  expect(final.getCell('E7').numFmt).toBe('dd.mm.yyyy')
+  expect(final.autoFilter).toBe('A1:G2')
+  expect(final.getCell('B6').fill).not.toEqual(expect.objectContaining({ type: 'pattern', pattern: 'solid' }))
   await expect(button).toBeEnabled()
 })
 
@@ -136,4 +189,12 @@ test('saved receipts can be exported for the first time after reloading offline'
   expect(workbook.getWorksheet('Receipts')!.getCell('G2').value).toBe('00000000000001')
   expect(workbook.getWorksheet('Purchased items')!.getCell('C2').value).toBe('191')
   expect(workbook.getWorksheet('Purchased items')!.getCell('E2').value).toBe('Shaving foam')
+  const final = workbook.getWorksheet('Final')!
+  expect(final.getCell('A2').value).toBe(1)
+  expect(final.getCell('B2').value).toBe('groceries')
+  expect(final.getCell('C2').value).toBe('Sample Market - 00000000000001')
+  expect(final.getCell('D2').value).toBe('191')
+  expect(final.getCell('F2').value).toBe(919.5)
+  expect(final.getCell('G2').value).toBe(97.65)
+  expect(final.getCell('B6').value).toBe("Employee's signature:")
 })
