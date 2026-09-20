@@ -1,28 +1,26 @@
 import { expect, test } from '@playwright/test'
 
-test('follows the system theme and preserves an explicit choice after reload', async ({ page }) => {
+test('follows the system theme and respects a saved preference', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })
-  await page.goto('/')
+  await page.goto('./')
   await expect(page.locator('html')).toHaveClass('dark')
-  await page.getByRole('button', { name: 'Switch to light theme' }).click()
+  await page.emulateMedia({ colorScheme: 'light' })
   await expect(page.locator('html')).not.toHaveClass('dark')
+  await page.evaluate(() => localStorage.setItem('theme', 'light'))
+  await page.emulateMedia({ colorScheme: 'dark' })
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible()
   await expect(page.locator('html')).not.toHaveClass('dark')
-  await page.getByRole('button', { name: 'Switch to dark theme' }).click()
-  await page.reload()
-  await expect(page.locator('html')).toHaveClass('dark')
 })
 
 test('fits a small mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 })
-  await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'Hello, world.' })).toBeVisible()
+  await page.goto('./')
+  await expect(page.getByRole('group', { name: 'Image actions' })).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
 
 test('has an installable manifest and reloads offline', async ({ page, context }) => {
-  await page.goto('/')
+  await page.goto('./')
   const manifestUrl = await page.locator('link[rel="manifest"]').getAttribute('href')
   const response = await page.request.get(manifestUrl!)
   const manifest = await response.json()
@@ -33,16 +31,21 @@ test('has an installable manifest and reloads offline', async ({ page, context }
     expect.objectContaining({ purpose: 'maskable' }),
   ]))
   for (const icon of manifest.icons) {
-    expect((await page.request.get(icon.src)).ok()).toBe(true)
+    const iconResponse = await page.request.get(new URL(icon.src, response.url()).href)
+    expect(iconResponse.ok()).toBe(true)
+    expect(iconResponse.headers()['content-type']).toContain('image/png')
   }
-  await page.evaluate(async () => {
-    await navigator.serviceWorker.ready
+  const registration = await page.evaluate(async () => {
+    const worker = await navigator.serviceWorker.ready
     if (!navigator.serviceWorker.controller) {
       await new Promise<void>((resolve) => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true }))
     }
+    return { scope: worker.scope, scriptURL: worker.active?.scriptURL }
   })
+  expect(registration.scope).toBe(new URL('./', page.url()).href)
+  expect(registration.scriptURL).toBe(new URL('sw.js', page.url()).href)
   await context.setOffline(true)
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Hello, world.' })).toBeVisible()
-  await page.getByRole('button', { name: /Switch to .* theme/ }).click()
+  await expect(page.getByRole('group', { name: 'Image actions' })).toBeVisible()
+  await page.getByRole('button', { name: 'Take an image' }).click()
 })
