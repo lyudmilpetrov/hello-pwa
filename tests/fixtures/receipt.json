@@ -1,0 +1,45 @@
+{
+  "id": "receipt-fixture-001",
+  "type": 3,
+  "dataFormatVersion": 1,
+  "dateTime": "2026-09-17T11:56:23Z",
+  "tin": "00000000000001",
+  "fnSerialNumber": "000000000000002",
+  "crRegisterNumber": "000000000000003",
+  "fdNumber": 172045,
+  "documentFiscalMark": "000000000000004",
+  "crData": {
+    "shiftNumber": 611,
+    "cashierName": "Sample cashier",
+    "locationName": "Sample Market",
+    "locationAddress": "1 Example Street, Bishkek"
+  },
+  "errors": { "3031": [1010, 1014], "3010": [1003] },
+  "ticketTotalSum": 91950,
+  "ticketTotalCashSum": 0,
+  "ticketTotalCashlessSum": 91950,
+  "ticketPrePaymentSum": 0,
+  "ticketPostPaymentSum": 0,
+  "ticketNumber": 191,
+  "operationType": 1,
+  "taxSystem": 0,
+  "taxCounters": [
+    { "type": "ST", "code": 0, "sum": 0, "rate": 0 },
+    { "type": "ST", "code": 1, "sum": 813, "rate": 1 },
+    { "type": "ST", "code": 2, "sum": 0, "rate": 2 },
+    { "type": "ST", "code": 3, "sum": 0, "rate": 3 },
+    { "type": "ST", "code": 4, "sum": 0, "rate": 5 },
+    { "type": "ST", "code": 5, "sum": 0, "rate": 0 },
+    { "type": "ST", "code": 6, "sum": 0, "rate": 0 },
+    { "type": "VAT", "code": 0, "sum": 0, "rate": 0 },
+    { "type": "VAT", "code": 1, "sum": 9765, "rate": 12 }
+  ],
+  "originFdNumber": 0,
+  "originFnSerialNumber": "",
+  "items": [
+    { "id": 0, "goodNomenclatureCode": "", "goodPrice": 29990.0, "goodQuantity": 1, "goodCost": 29990, "goodVatCode": 1, "goodStCode": 1, "goodName": "Shaving foam", "calcAttributeCode": 0, "marked": false, "paymentType": 0 },
+    { "id": 0, "goodNomenclatureCode": "", "goodPrice": 16990.0, "goodQuantity": 3, "goodCost": 50970, "goodVatCode": 1, "goodStCode": 1, "goodName": "Paper roll", "calcAttributeCode": 0, "marked": false, "paymentType": 0 },
+    { "id": 0, "goodNomenclatureCode": "", "goodPrice": 10990.0, "goodQuantity": 1, "goodCost": 10990, "goodVatCode": 1, "goodStCode": 1, "goodName": "Razor", "calcAttributeCode": 0, "marked": false, "paymentType": 0 }
+  ],
+  "taxSystemName": "General taxation system"
+}

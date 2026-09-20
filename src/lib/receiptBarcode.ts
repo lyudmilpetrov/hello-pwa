@@ -33,8 +33,20 @@ function overlapsCode(a: Region, b: Region): boolean {
 }
 
 function receiptLink(codes: DetectedCode[]): string {
+  // A crop can turn part of a QR into a very elongated checksum-error box. If
+  // that box intersects a decoded code, it is not evidence of another lower QR.
+  // Keep isolated unreadable codes so they still prevent a promotional fallback.
+  const candidates = codes.filter((code) => {
+    const a = code.bounds
+    if (code.text !== null || Math.max(a.width, a.height) <= 4 * Math.min(a.width, a.height)) return true
+    return !codes.some((other) => {
+      const b = other.bounds
+      return other.text !== null && a.x < b.x + b.width && b.x < a.x + a.width
+        && a.y < b.y + b.height && b.y < a.y + a.height
+    })
+  })
   // Compare positions in the original photo, independent of scan order or crop.
-  const bottom = codes.reduce<DetectedCode | undefined>((lowest, code) =>
+  const bottom = candidates.reduce<DetectedCode | undefined>((lowest, code) =>
     !lowest || code.bounds.y + code.bounds.height / 2 > lowest.bounds.y + lowest.bounds.height / 2
       ? code
       : lowest, undefined)
@@ -53,6 +65,72 @@ function receiptLink(codes: DetectedCode[]): string {
     throw new Error('The bottom QR code does not contain a valid website link (http or https). Choose a receipt with a website QR code.')
   }
   return url
+}
+
+/** Prepares a local QR reader once and reuses its canvas for live camera frames. */
+export async function createReceiptFrameReader(): Promise<(video: HTMLVideoElement) => Promise<string | null>> {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    throw new Error('Your browser could not read the camera image. Please try another browser.')
+  }
+
+  try {
+    await prepareZXingModule({ overrides: readerOverrides, fireImmediately: true })
+  } catch {
+    purgeZXingModule()
+    throw new Error('The QR reader could not start. Reload the page and try again.')
+  }
+
+  return async (video) => {
+    const width = video.videoWidth
+    const height = video.videoHeight
+    if (video.readyState < 2 || !width || !height) return null
+
+    // Scan the whole frame so a lower receipt code takes precedence over any
+    // promotional QR above it. Keep each frame under two million pixels.
+    const scale = Math.min(1, 1400 / Math.max(width, height))
+    const frameWidth = Math.max(1, Math.round(width * scale))
+    const frameHeight = Math.max(1, Math.round(height * scale))
+    if (canvas.width !== frameWidth) canvas.width = frameWidth
+    if (canvas.height !== frameHeight) canvas.height = frameHeight
+
+    let codes: Awaited<ReturnType<typeof readBarcodes>>
+    try {
+      context.drawImage(video, 0, 0, frameWidth, frameHeight)
+      const pixels = context.getImageData(0, 0, frameWidth, frameHeight)
+      codes = await readBarcodes(pixels, {
+        formats: ['QRCode'],
+        tryHarder: true,
+        tryDenoise: true,
+        returnErrors: true,
+      })
+    } catch {
+      throw new Error('The camera QR reader stopped working. Close the camera and try again.')
+    }
+
+    const detectedCodes: DetectedCode[] = []
+    for (const code of codes) {
+      const corners = Object.values(code.position)
+      const left = Math.min(...corners.map((point) => point.x))
+      const top = Math.min(...corners.map((point) => point.y))
+      const right = Math.max(...corners.map((point) => point.x))
+      const bottom = Math.max(...corners.map((point) => point.y))
+      if (right <= left || bottom <= top) continue
+      detectedCodes.push({
+        bounds: { x: left, y: top, width: right - left, height: bottom - top },
+        text: code.isValid ? code.text : null,
+      })
+    }
+
+    try {
+      return receiptLink(detectedCodes)
+    } catch {
+      // A missing, unreadable, or non-website QR is normal while framing the
+      // receipt. Keep scanning without falling back to a different, higher QR.
+      return null
+    }
+  }
 }
 
 /** Reads a receipt QR code in this browser without uploading the image anywhere. */
