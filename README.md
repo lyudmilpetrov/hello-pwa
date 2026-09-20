@@ -4,6 +4,8 @@ A receipt collector built with React, TypeScript, Redux Toolkit, Tailwind CSS, a
 
 The table shows the receipt date/time, merchant, total amount, VAT (НДС), ИНН, ККМ, ФМ, ФПД, ФД, and expandable purchased items. Amounts are stored as integer minor units; dates display in Bishkek time and fiscal identifiers retain their leading zeros. Redux keeps the imported receipts, with versioned localStorage persistence for refresh/offline viewing. Reimporting the same receipt updates its row.
 
+Use **Download Excel** beside the receipt count to export all saved receipts as an `.xlsx` workbook. The Receipts sheet includes the displayed fields, address, source links, and receipt IDs; Purchased items includes every item linked to its receipt. Amounts are numeric values in сом, dates use Bishkek time, and fiscal identifiers remain text to preserve leading zeros. Missing VAT stays blank. Export runs locally and also works offline after the production app has been cached.
+
 ## Develop
 
 Use Node.js 24 or newer.

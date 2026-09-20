@@ -1,4 +1,4 @@
-import { Fragment } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import type { Receipt } from '../types/receipt'
 
 const money = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -9,12 +9,41 @@ const cell = 'px-4 py-4 text-left align-top'
 const numberCell = `${cell} whitespace-nowrap font-mono text-xs`
 
 export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
+  const exporting = useRef(false)
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
+  async function downloadExcel() {
+    if (exporting.current || !receipts.length) return
+    exporting.current = true
+    setIsExporting(true)
+    setExportError(null)
+    try {
+      const { downloadReceipts } = await import('../lib/receiptExport')
+      await downloadReceipts(receipts)
+    } catch {
+      setExportError('Could not create the Excel file. Please try again.')
+    } finally {
+      exporting.current = false
+      setIsExporting(false)
+    }
+  }
+
   return (
     <section aria-label="Imported receipts" className="w-full min-w-0">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
-        <h2 className="text-lg font-semibold">Receipts <span className="text-sm font-normal text-black/50 dark:text-white/50">({receipts.length})</span></h2>
-        <p className="text-xs text-black/50 dark:text-white/50">Amounts in сом · Time in Bishkek</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Receipts <span className="text-sm font-normal text-black/50 dark:text-white/50">({receipts.length})</span></h2>
+          <p className="mt-1 text-xs text-black/50 dark:text-white/50">Amounts in сом · Time in Bishkek</p>
+        </div>
+        <button type="button" onClick={downloadExcel} disabled={!receipts.length || isExporting} aria-busy={isExporting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-violet-700/20 bg-white px-4 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-default disabled:opacity-50 dark:border-violet-300/25 dark:bg-[#1e1e25] dark:text-violet-300 dark:hover:bg-violet-400/10">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3v12m-5-5 5 5 5-5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+          </svg>
+          {isExporting ? 'Preparing Excel…' : 'Download Excel'}
+        </button>
       </div>
+      {exportError && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">{exportError}</p>}
       <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1e1e25]">
         <table className="w-full text-sm">
           <caption className="sr-only">Imported receipt information</caption>
