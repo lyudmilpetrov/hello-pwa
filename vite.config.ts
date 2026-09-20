@@ -14,7 +14,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Hello — A fresh start',
+        name: 'Vat-Taxes-Kyrgyzstan',
         short_name: 'Hello',
         description: 'Your minimal React and Tailwind starter.',
         id: './',

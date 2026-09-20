@@ -27,14 +27,20 @@ export async function loadReceipt(sourceUrl: string): Promise<unknown> {
       body: JSON.stringify({ url: sourceUrl }),
       signal: controller.signal,
     })
-    const data: unknown = await response.json().catch(() => null)
+    const isJson = /(?:application\/json|\+json)(?:;|$)/i.test(response.headers.get('content-type') ?? '')
+    // Static hosts return an HTML 404/405 (or the app shell) for a missing API.
+    // That means the QR was read successfully; changing cameras cannot fix it.
+    if ([404, 405, 501].includes(response.status) || (response.ok && !isJson)) {
+      throw new Error('Receipt importing is not available on this website. Your receipt link was read successfully; you can open the original receipt below.')
+    }
+    const data: unknown = isJson ? await response.json().catch(() => null) : null
     if (!response.ok) {
       const message = data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
         ? data.error
-        : 'The receipt could not be loaded. Please try again.'
+        : 'The receipt service is temporarily unavailable. Please try again or open the original receipt below.'
       throw new Error(message)
     }
-    if (!data) throw new Error('The receipt service returned an empty response. Please try again.')
+    if (!data) throw new Error('The receipt service returned an unreadable response. Please try again or open the original receipt below.')
     return data
   } catch (error) {
     if (controller.signal.aborted) throw new Error('The receipt website took too long to respond. Please try again.')

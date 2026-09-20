@@ -23,10 +23,12 @@ export default function App() {
   const [preference, setPreference] = useState<Theme | null>(readPreference)
   const [systemDark, setSystemDark] = useState(() => matchMedia('(prefers-color-scheme: dark)').matches)
   const fileInput = useRef<HTMLInputElement>(null)
+  const cameraPhotoInput = useRef<HTMLInputElement>(null)
   const cameraButton = useRef<HTMLButtonElement>(null)
   const busy = useRef(false)
   const [phase, setPhase] = useState<'idle' | 'scanning' | 'loading'>('idle')
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [failedReceiptUrl, setFailedReceiptUrl] = useState<string | null>(null)
   const [cameraOpen, setCameraOpen] = useState(false)
   const [receiptUrl, setReceiptUrl] = useState('')
   const [notice, setNotice] = useState('')
@@ -39,10 +41,13 @@ export default function App() {
     if (busy.current) return
     busy.current = true
     setUploadError(null)
+    setFailedReceiptUrl(null)
     setNotice('')
     setPhase(scanImage ? 'scanning' : 'loading')
+    let sourceUrl: string | null = null
     try {
       const url = normalizeReceiptUrl(await getUrl())
+      sourceUrl = url
       setReceiptUrl(url)
       setPhase('loading')
       const receipt = parseReceipt(await loadReceipt(url), url)
@@ -50,6 +55,7 @@ export default function App() {
       setReceiptUrl('')
       setNotice('Receipt added.')
     } catch (error) {
+      setFailedReceiptUrl(sourceUrl)
       setUploadError(error instanceof Error ? error.message : 'Could not import this receipt. Please try again.')
     } finally {
       busy.current = false
@@ -74,6 +80,13 @@ export default function App() {
     event.preventDefault()
     if (receiptUrl.trim() && !cameraOpen) await importReceipt(async () => receiptUrl, false)
   }
+
+  useEffect(() => {
+    const input = cameraPhotoInput.current!
+    const restoreFocus = () => cameraButton.current?.focus()
+    input.addEventListener('cancel', restoreFocus)
+    return () => input.removeEventListener('cancel', restoreFocus)
+  }, [])
 
   useEffect(() => {
     const media = matchMedia('(prefers-color-scheme: dark)')
@@ -102,7 +115,7 @@ export default function App() {
         <p className="mt-2 text-sm text-black/55 dark:text-white/55">Keep receipt details and VAT together.</p>
       </header>
       <div role="group" aria-label="Image actions" className="inline-flex items-center gap-1 rounded-2xl border border-black/10 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#1e1e25]">
-        <button ref={cameraButton} type="button" onClick={() => { setUploadError(null); setNotice(''); setCameraOpen(true) }} disabled={isBusy || cameraOpen} aria-haspopup="dialog" className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:cursor-wait disabled:opacity-50 sm:px-5 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
+        <button ref={cameraButton} type="button" onClick={() => { setUploadError(null); setFailedReceiptUrl(null); setNotice(''); setCameraOpen(true) }} disabled={isBusy || cameraOpen} aria-haspopup="dialog" className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:cursor-wait disabled:opacity-50 sm:px-5 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M14.5 4h-5L7.5 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.5Z" />
             <circle cx="12" cy="13" r="4" />
@@ -118,6 +131,7 @@ export default function App() {
           Upload file
         </button>
       </div>
+      <input ref={cameraPhotoInput} type="file" accept="image/*" capture="environment" aria-label="Camera photo" onChange={uploadImage} disabled={isBusy} hidden />
       <form onSubmit={submitReceiptUrl} aria-label="Import receipt link" className="flex w-full max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
           <label htmlFor="receipt-url" className="mb-1 block text-xs text-black/60 dark:text-white/60">Or paste a receipt link</label>
@@ -129,8 +143,16 @@ export default function App() {
         {phase === 'scanning' ? 'Reading barcode…' : phase === 'loading' ? 'Loading receipt…' : notice}
       </p>
       {uploadError && <p role="alert" className="max-w-sm text-center text-sm text-red-700 dark:text-red-300">{uploadError}</p>}
+      {failedReceiptUrl && (
+        <a href={failedReceiptUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-violet-700 underline underline-offset-4 dark:text-violet-300">
+          Open original receipt
+        </a>
+      )}
       <ReceiptTable receipts={receipts} />
-      {cameraOpen && <CameraScanner onScan={importCameraReceipt} onClose={() => {
+      {cameraOpen && <CameraScanner onScan={importCameraReceipt} onTakePhoto={() => {
+        setCameraOpen(false)
+        cameraPhotoInput.current?.click()
+      }} onClose={() => {
         setCameraOpen(false)
         requestAnimationFrame(() => cameraButton.current?.focus())
       }} />}

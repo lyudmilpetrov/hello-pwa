@@ -6,10 +6,52 @@ const IMAGE_EXTENSION = /\.(avif|bmp|gif|heic|heif|ico|jpe?g|png|svg|webp)$/i
 
 type Region = { x: number; y: number; width: number; height: number }
 type DetectedCode = { bounds: Region; text: string | null }
+type NativeBarcodeDetector = {
+  detect: (source: HTMLCanvasElement) => Promise<{ rawValue: string; boundingBox: Region }[]>
+}
+type NativeBarcodeDetectorConstructor = {
+  new (options: { formats: string[] }): NativeBarcodeDetector
+  getSupportedFormats: () => Promise<string[]>
+}
 
 const readerOverrides = {
   // Ship the decoder with the app, including installations under a subpath.
   locateFile: () => readerWasmUrl,
+}
+
+async function nativeQrDetector(): Promise<NativeBarcodeDetector | null> {
+  // Availability depends on both the browser and its platform barcode service.
+  // Keep ZXing for browsers (including iOS) without native QR support.
+  const Detector = (globalThis as typeof globalThis & {
+    BarcodeDetector?: NativeBarcodeDetectorConstructor
+  }).BarcodeDetector
+  if (!Detector) return null
+  try {
+    if (!(await Detector.getSupportedFormats()).includes('qr_code')) return null
+    return new Detector({ formats: ['qr_code'] })
+  } catch {
+    return null
+  }
+}
+
+function appendCodes(codes: Awaited<ReturnType<typeof readBarcodes>>, detected: DetectedCode[], region: Region, canvas: HTMLCanvasElement) {
+  for (const code of codes) {
+    const corners = Object.values(code.position)
+    const left = Math.min(...corners.map((point) => point.x))
+    const top = Math.min(...corners.map((point) => point.y))
+    const right = Math.max(...corners.map((point) => point.x))
+    const bottom = Math.max(...corners.map((point) => point.y))
+    if (right <= left || bottom <= top) continue
+    detected.push({
+      bounds: {
+        x: region.x + left * region.width / canvas.width,
+        y: region.y + top * region.height / canvas.height,
+        width: (right - left) * region.width / canvas.width,
+        height: (bottom - top) * region.height / canvas.height,
+      },
+      text: code.isValid ? code.text : null,
+    })
+  }
 }
 
 function webUrl(value: string): string | null {
@@ -75,11 +117,14 @@ export async function createReceiptFrameReader(): Promise<(video: HTMLVideoEleme
     throw new Error('Your browser could not read the camera image. Please try another browser.')
   }
 
+  let nativeDetector = await nativeQrDetector()
+  let wasmAvailable = true
   try {
     await prepareZXingModule({ overrides: readerOverrides, fireImmediately: true })
   } catch {
     purgeZXingModule()
-    throw new Error('The QR reader could not start. Reload the page and try again.')
+    wasmAvailable = false
+    if (!nativeDetector) throw new Error('The QR reader could not start. Reload the page and try again.')
   }
 
   return async (video) => {
@@ -87,40 +132,49 @@ export async function createReceiptFrameReader(): Promise<(video: HTMLVideoEleme
     const height = video.videoHeight
     if (video.readyState < 2 || !width || !height) return null
 
-    // Scan the whole frame so a lower receipt code takes precedence over any
-    // promotional QR above it. Keep each frame under two million pixels.
-    const scale = Math.min(1, 1400 / Math.max(width, height))
-    const frameWidth = Math.max(1, Math.round(width * scale))
-    const frameHeight = Math.max(1, Math.round(height * scale))
-    if (canvas.width !== frameWidth) canvas.width = frameWidth
-    if (canvas.height !== frameHeight) canvas.height = frameHeight
-
-    let codes: Awaited<ReturnType<typeof readBarcodes>>
-    try {
-      context.drawImage(video, 0, 0, frameWidth, frameHeight)
-      const pixels = context.getImageData(0, 0, frameWidth, frameHeight)
-      codes = await readBarcodes(pixels, {
-        formats: ['QRCode'],
-        tryHarder: true,
-        tryDenoise: true,
-        returnErrors: true,
-      })
-    } catch {
-      throw new Error('The camera QR reader stopped working. Close the camera and try again.')
-    }
-
     const detectedCodes: DetectedCode[] = []
-    for (const code of codes) {
-      const corners = Object.values(code.position)
-      const left = Math.min(...corners.map((point) => point.x))
-      const top = Math.min(...corners.map((point) => point.y))
-      const right = Math.max(...corners.map((point) => point.x))
-      const bottom = Math.max(...corners.map((point) => point.y))
-      if (right <= left || bottom <= top) continue
-      detectedCodes.push({
-        bounds: { x: left, y: top, width: right - left, height: bottom - top },
-        text: code.isValid ? code.text : null,
-      })
+    // Dense receipt QRs lose modules when an entire tall camera frame is reduced.
+    // Also inspect an overlapping lower region at greater detail, then compare
+    // all detections in the original frame so the bottom receipt code still wins.
+    const regions = [
+      { x: 0, y: 0, width, height, maxSide: 1400 },
+      { x: 0, y: height * 0.4, width, height: height * 0.6, maxSide: 1800 },
+    ]
+    for (const region of regions) {
+      const scale = Math.min(1, region.maxSide / Math.max(region.width, region.height))
+      canvas.width = Math.max(1, Math.round(region.width * scale))
+      canvas.height = Math.max(1, Math.round(region.height * scale))
+      try {
+        context.drawImage(video, region.x, region.y, region.width, region.height, 0, 0, canvas.width, canvas.height)
+        if (wasmAvailable) {
+          const codes = await readBarcodes(context.getImageData(0, 0, canvas.width, canvas.height), {
+            formats: ['QRCode'], tryHarder: true, tryDenoise: true, returnErrors: true,
+          })
+          appendCodes(codes, detectedCodes, region, canvas)
+        }
+      } catch {
+        if (!nativeDetector) throw new Error('The camera QR reader stopped working. Close the camera and try again.')
+      }
+      if (nativeDetector) {
+        try {
+          for (const code of await nativeDetector.detect(canvas)) {
+            const bounds = code.boundingBox
+            if (!(bounds.width > 0 && bounds.height > 0)) continue
+            detectedCodes.push({
+              bounds: {
+                x: region.x + bounds.x * region.width / canvas.width,
+                y: region.y + bounds.y * region.height / canvas.height,
+                width: bounds.width * region.width / canvas.width,
+                height: bounds.height * region.height / canvas.height,
+              },
+              text: code.rawValue,
+            })
+          }
+        } catch {
+          nativeDetector = null
+          if (!wasmAvailable) throw new Error('The camera QR reader stopped working. Close the camera and try again.')
+        }
+      }
     }
 
     try {
@@ -198,23 +252,7 @@ export async function readReceiptUrl(file: File): Promise<string> {
           tryDenoise: true,
           returnErrors: true,
         })
-        for (const code of codes) {
-          const corners = Object.values(code.position)
-          const left = Math.min(...corners.map((point) => point.x))
-          const top = Math.min(...corners.map((point) => point.y))
-          const right = Math.max(...corners.map((point) => point.x))
-          const bottom = Math.max(...corners.map((point) => point.y))
-          if (right <= left || bottom <= top) continue
-          detectedCodes.push({
-            bounds: {
-              x: region.x + left * region.width / canvas.width,
-              y: region.y + top * region.height / canvas.height,
-              width: (right - left) * region.width / canvas.width,
-              height: (bottom - top) * region.height / canvas.height,
-            },
-            text: code.isValid ? code.text : null,
-          })
-        }
+        appendCodes(codes, detectedCodes, region, canvas)
         // Let progress updates paint before the next decoding attempt.
         await new Promise<void>((resolve) => setTimeout(resolve, 0))
         if (scale === 1) break

@@ -1,0 +1,15 @@
+{
+  "hash": "216377cf",
+  "configHash": "3491ef32",
+  "lockfileHash": "3887c1e1",
+  "browserHash": "3b9cf6d2",
+  "optimized": {
+    "zxing-wasm/reader": {
+      "src": "../../node_modules/zxing-wasm/dist/es/reader/index.js",
+      "file": "zxing-wasm_reader.js",
+      "fileHash": "b6f6ae27",
+      "needsInterop": false
+    }
+  },
+  "chunks": {}
+}

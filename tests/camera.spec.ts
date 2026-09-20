@@ -1,10 +1,13 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import QRCode from 'qrcode'
 
 const receiptUrl = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?date=20260917T175623&sum=91950&fn_number=000000000000002&regNumber=000000000000003&tin=00000000000001&type=3&operation_type=1&fd_number=172045&fm=000000000000004'
 const receiptFixture = JSON.parse(readFileSync(new URL('./fixtures/receipt.json', import.meta.url), 'utf8'))
+const photoPath = fileURLToPath(new URL('../samples/qr/PXL_20260920_120718550.jpg', import.meta.url))
+const photoReceiptUrl = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?date=20260907T170136&sum=406450&fn_number=0000000002427051&regNumber=0000000000300969&tin=00112200510239&type=3&operation_type=1&fd_number=45358&fm=216815068810378'
 
 type CameraHarness = {
   requests: MediaStreamConstraints[]
@@ -12,6 +15,8 @@ type CameraHarness = {
   stopped: number
   frameReads: number
   imports: { created: number; stopped: number }[]
+  photoPickers: { created: number; stopped: number }[]
+  appliedConstraints: MediaTrackConstraints[]
   releasePermission: () => void
 }
 
@@ -25,22 +30,35 @@ declare global {
 // Only the camera hardware and permission prompt are replaced.
 async function installCamera(page: Page, options: {
   payload?: string
-  firstError?: 'NotAllowedError' | 'NotFoundError'
+  imageData?: string
+  width?: number
+  height?: number
+  cameraControls?: boolean
+  firstError?: 'NotAllowedError' | 'NotFoundError' | 'OverconstrainedError'
   pendingPermission?: boolean
 } = {}) {
   const qr = options.payload
     ? await QRCode.toDataURL(options.payload, { width: 480, margin: 4 })
     : null
-  await page.addInitScript(({ qr, firstError, pendingPermission }) => {
+  await page.addInitScript(({ qr, imageData, width, height, cameraControls, firstError, pendingPermission }) => {
     const harness: CameraHarness = {
       requests: [],
       created: Number(sessionStorage.getItem('camera-created') || 0),
       stopped: Number(sessionStorage.getItem('camera-stopped') || 0),
       frameReads: 0,
       imports: [],
+      photoPickers: [],
+      appliedConstraints: [],
       releasePermission: () => {},
     }
     window.cameraHarness = harness
+    const clickInput = HTMLInputElement.prototype.click
+    HTMLInputElement.prototype.click = function () {
+      if (this.type === 'file' && this.getAttribute('capture') === 'environment') {
+        harness.photoPickers.push({ created: harness.created, stopped: harness.stopped })
+      }
+      clickInput.call(this)
+    }
     const fetchReceipt = window.fetch.bind(window)
     window.fetch = (...args) => {
       if (typeof args[0] === 'string' && args[0].endsWith('/api/receipts')) {
@@ -67,24 +85,45 @@ async function installCamera(page: Page, options: {
         }
         await permission
         const canvas = document.createElement('canvas')
-        canvas.width = 640
-        canvas.height = 640
+        canvas.width = width ?? 640
+        canvas.height = height ?? 640
         const drawing = canvas.getContext('2d')!
         let code: HTMLImageElement | null = null
-        if (qr) {
+        if (imageData || qr) {
           code = new Image()
-          code.src = qr
+          code.src = imageData || qr!
           await code.decode()
         }
         const draw = () => {
           drawing.fillStyle = 'white'
           drawing.fillRect(0, 0, canvas.width, canvas.height)
-          if (code) drawing.drawImage(code, 80, 80, 480, 480)
+          if (code && imageData) {
+            // Show the entire photo as a camera frame. The production decoder
+            // must find the receipt QR itself; the harness never crops it.
+            const scale = Math.min(canvas.width / code.naturalWidth, canvas.height / code.naturalHeight)
+            const imageWidth = code.naturalWidth * scale
+            const imageHeight = code.naturalHeight * scale
+            drawing.drawImage(code, (canvas.width - imageWidth) / 2, (canvas.height - imageHeight) / 2, imageWidth, imageHeight)
+          } else if (code) drawing.drawImage(code, 80, 80, 480, 480)
         }
         draw()
         const stream = canvas.captureStream(15)
         const timer = window.setInterval(draw, 60)
         for (const track of stream.getTracks()) {
+          if (cameraControls) {
+            let currentConstraints: MediaTrackConstraints = {}
+            let currentSettings = { focusMode: 'manual', torch: false, zoom: 1 }
+            Object.defineProperties(track, {
+              getCapabilities: { value: () => ({ focusMode: ['manual', 'continuous'], torch: true, zoom: { min: 1, max: 4, step: 0.5 } }) },
+              getSettings: { value: () => ({ ...currentSettings }) },
+              getConstraints: { value: () => structuredClone(currentConstraints) },
+              applyConstraints: { value: async (next: MediaTrackConstraints) => {
+                harness.appliedConstraints.push(structuredClone(next))
+                currentConstraints = structuredClone(next)
+                currentSettings = Object.assign({}, currentSettings, ...(next.advanced ?? []))
+              } },
+            })
+          }
           harness.created += 1
           sessionStorage.setItem('camera-created', String(harness.created))
           const stop = track.stop.bind(track)
@@ -101,7 +140,7 @@ async function installCamera(page: Page, options: {
         return stream
       },
     })
-  }, { qr, firstError: options.firstError, pendingPermission: options.pendingPermission })
+  }, { qr, imageData: options.imageData, width: options.width, height: options.height, cameraControls: options.cameraControls, firstError: options.firstError, pendingPermission: options.pendingPermission })
 }
 
 async function openCamera(page: Page) {
@@ -244,7 +283,7 @@ test('shows a rear-camera preview on mobile and stops it when cancelled', async 
   expect(await page.evaluate(() => window.cameraHarness.requests)).toEqual([
     {
       audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
     },
   ])
   await expect(page.getByRole('button', { name: 'Take an image', includeHidden: true })).toBeDisabled()
