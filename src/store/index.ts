@@ -1,11 +1,13 @@
-import { configureStore } from '@reduxjs/toolkit'
+import { combineReducers, configureStore, createAction } from '@reduxjs/toolkit'
 import receiptsReducer from './receiptsSlice'
 import { getReceiptStorage, loadReceipts, saveReceipts } from './persistence'
 
 const storage = getReceiptStorage()
+const appReducer = combineReducers({ receipts: receiptsReducer })
+export const memoryCleared = createAction('app/memoryCleared')
 
 export const store = configureStore({
-  reducer: { receipts: receiptsReducer },
+  reducer: (state, action) => appReducer(memoryCleared.match(action) ? undefined : state, action),
   preloadedState: { receipts: { items: loadReceipts(storage) } },
 })
 

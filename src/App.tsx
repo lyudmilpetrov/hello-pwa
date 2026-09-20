@@ -6,6 +6,7 @@ import { loadReceipt, normalizeReceiptUrl } from './lib/receiptApi'
 import { readReceiptUrl } from './lib/receiptBarcode'
 import { parseReceipt } from './lib/receiptData'
 import { useAppDispatch, useAppSelector } from './store/hooks'
+import { memoryCleared } from './store'
 import { receiptAdded } from './store/receiptsSlice'
 
 type Theme = 'light' | 'dark'
@@ -43,6 +44,34 @@ export default function App() {
   const receipts = useAppSelector((state) => state.receipts.items)
   const isBusy = phase !== 'idle'
   const dark = preference ? preference === 'dark' : systemDark
+
+  function clearMemory() {
+    if (busy.current || cameraOpen) return
+    dispatch(memoryCleared())
+    setPreference(null)
+    setReceiptUrl('')
+    setImportFailures([])
+    setFileProgress(null)
+    if (fileInput.current) fileInput.current.value = ''
+    if (cameraPhotoInput.current) cameraPhotoInput.current.value = ''
+    try {
+      // Clear after dispatch so the persistence subscriber cannot recreate the cache.
+      localStorage.clear()
+      setNotice('Memory cleared. Saved receipts and preferences have been removed.')
+    } catch {
+      setNotice('Current receipts cleared, but browser storage could not be cleared. Saved data may return after reloading.')
+    }
+  }
+
+  function toggleTheme() {
+    const nextTheme = dark ? 'light' : 'dark'
+    setPreference(nextTheme)
+    try {
+      localStorage.setItem('theme', nextTheme)
+    } catch {
+      // Keep the switch usable when the browser blocks local storage.
+    }
+  }
 
   const importReceipts = useCallback(async (sources: ReceiptSource[], scanImage: boolean) => {
     if (busy.current || sources.length === 0) return
@@ -143,9 +172,14 @@ export default function App() {
   }, [dark])
 
   return (
-    <main className="mx-auto flex min-h-svh w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 pt-16 pb-10 sm:px-6">
-      <div className="absolute top-4 right-4 whitespace-nowrap text-xs text-black/55 sm:right-6 dark:text-white/55">
-        Version <time dateTime={releaseTimestamp} title="Release build time (UTC)" className="font-mono tabular-nums">{releaseVersion}</time>
+    <main className="mx-auto flex min-h-svh w-full max-w-7xl flex-col items-center justify-center gap-6 px-4 pt-20 pb-10 sm:px-6 lg:max-w-none">
+      <div className="absolute top-4 right-4 flex items-center gap-3 sm:right-6">
+        <button type="button" onClick={toggleTheme} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title={dark ? 'Switch to light mode' : 'Switch to dark mode'} className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-black/10 bg-white text-black/70 shadow-sm transition-colors hover:bg-violet-50 hover:text-violet-700 dark:border-white/10 dark:bg-[#1e1e25] dark:text-white/70 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            {dark ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42" /></> : <path d="M20.9 13.1A9 9 0 0 1 10.9 3.1a9 9 0 1 0 10 10Z" />}
+          </svg>
+        </button>
+        <span className="whitespace-nowrap text-xs text-black/55 dark:text-white/55">Version <time dateTime={releaseTimestamp} title="Release build time (UTC)" className="font-mono tabular-nums">{releaseVersion}</time></span>
       </div>
       <header className="text-center">
         <h1 className="text-3xl font-semibold tracking-tight">Receipt collector</h1>
@@ -196,7 +230,7 @@ export default function App() {
           </ul>
         </div>
       )}
-      <ReceiptTable receipts={receipts} />
+      <ReceiptTable receipts={receipts} onClearMemory={clearMemory} clearDisabled={isBusy || cameraOpen} />
       {cameraOpen && <CameraScanner onScan={importCameraReceipt} onTakePhoto={() => {
         setCameraOpen(false)
         cameraPhotoInput.current?.click()

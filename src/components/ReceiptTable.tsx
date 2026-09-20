@@ -8,7 +8,11 @@ const receiptDate = new Intl.DateTimeFormat('ru-RU', {
 const cell = 'px-4 py-4 text-left align-top'
 const numberCell = `${cell} whitespace-nowrap font-mono text-xs`
 
-export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
+export function ReceiptTable({ receipts, onClearMemory, clearDisabled }: {
+  receipts: Receipt[]
+  onClearMemory: () => void
+  clearDisabled: boolean
+}) {
   const exporting = useRef(false)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -36,12 +40,24 @@ export function ReceiptTable({ receipts }: { receipts: Receipt[] }) {
           <h2 className="text-lg font-semibold">Receipts <span className="text-sm font-normal text-black/50 dark:text-white/50">({receipts.length})</span></h2>
           <p className="mt-1 text-xs text-black/50 dark:text-white/50">Amounts in сом</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={downloadExcel} disabled={!receipts.length || isExporting} aria-busy={isExporting} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-violet-700/20 bg-white px-4 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-50 disabled:cursor-default disabled:opacity-50 dark:border-violet-300/25 dark:bg-[#1e1e25] dark:text-violet-300 dark:hover:bg-violet-400/10">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 3v12m-5-5 5 5 5-5M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
           </svg>
           {isExporting ? 'Preparing Excel…' : 'Download Excel'}
         </button>
+        <button type="button" onClick={() => {
+          if (exporting.current || clearDisabled) return
+          setExportError(null)
+          onClearMemory()
+        }} disabled={clearDisabled || isExporting} title="Erase all receipts and saved preferences from this browser" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-700/20 bg-white px-4 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:cursor-default disabled:opacity-50 dark:border-red-300/25 dark:bg-[#1e1e25] dark:text-red-300 dark:hover:bg-red-400/10">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6m4-6v6" />
+          </svg>
+          Clear Memory
+        </button>
+        </div>
       </div>
       {exportError && <p role="alert" className="mb-3 text-sm text-red-700 dark:text-red-300">{exportError}</p>}
       <div className="overflow-x-auto rounded-2xl border border-black/10 bg-white dark:border-white/10 dark:bg-[#1e1e25]">

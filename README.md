@@ -32,6 +32,8 @@ The top-right version shows the release build time in UTC as `YYYY-MM-DD:hh:mm:s
 
 The tax receipt endpoint returns JSON and does not allow cross-origin browser requests. The app uses its own `POST /api/receipts` endpoint to retrieve that JSON. Vite development and preview servers include this endpoint. Images stay in the browser; only the decoded receipt link is sent to the app server, which fetches the fixed `tax.salyk.kg` receipt endpoint.
 
+Opening the original receipt in a tab does not let the PWA read its contents. **Take an image** and **Upload files** both call the same receipt importer and need this endpoint on the published site. The service retrieves the receipt and returns its fields; it does not store or back up receipts.
+
 For a production deployment with both the app and its receipt API, build and run the included Node server:
 
 ```sh
@@ -40,6 +42,10 @@ npm start
 ```
 
 It listens on `127.0.0.1:3000` by default. Configure `HOST`, `PORT`, and `BASE_PATH` for your host. Use the same `BASE_PATH` at build and runtime, for example `/hello-pwa/`. Put the Node server behind HTTPS for public use; when a reverse proxy terminates HTTPS, include the public app origin in `RECEIPT_ALLOWED_ORIGINS`.
+
+To keep GitHub Pages and deploy just the receipt-fetching service, run `./scripts/package-receipt-api.ps1` in PowerShell. It creates `artifacts/receipt-api/receipt-api.zip` containing only the two server source files and a dependency-free Node package manifest. The package excludes receipt photos, saved receipts, environment files, credentials, and frontend assets. Run it with Node 24+ using `npm start`, `HOST=0.0.0.0`, `BASE_PATH=/`, and `RECEIPT_ALLOWED_ORIGINS=https://lyudmilpetrov.github.io`. The host can supply `PORT`; otherwise it listens on 3000. The root page returns 404 because this package serves only `/api/receipts`.
+
+Azure App Service is one supported host: a Linux **F1 Free** plan with **Node 24 LTS**, HTTPS enabled, and startup command `node server/index.ts` can run this ZIP without installing packages. Keep `SCM_DO_BUILD_DURING_DEPLOYMENT=false`. After deployment, set the GitHub Actions variable `RECEIPT_API_BASE_URL` to the service's HTTPS root URL and rerun the Pages workflow. Hosting must be configured before the frontend can automatically import either camera or uploaded receipts. The [Azure Node quickstart](https://learn.microsoft.com/en-us/azure/app-service/quickstart-nodejs) documents the F1 tier and Node runtime.
 
 The service worker is enabled in production builds. Open the app once online, let it activate, and then reload offline to view previously imported receipts. New receipt imports need an internet connection. Supported browsers can install the app using their install or Add to Home Screen action.
 
@@ -89,7 +95,7 @@ Workflow setup follows the [Vite GitHub Pages guide](https://vite.dev/guide/stat
 - `vite.config.ts`: PWA name, metadata, icons, and caching.
 - `public/`: favicon and installation icons.
 
-The theme follows the operating system preference and respects any previously saved local theme choice. The head script applies the theme before React renders to prevent a theme flash. No remote fonts or assets are required.
+The theme follows the operating system preference until you choose a theme. Use the sun/moon button beside the version in the top-right corner to switch between light and dark mode; your choice is saved for future visits. The head script applies the theme before React renders to prevent a theme flash. No remote fonts or assets are required.
 
 ## Verify
 
