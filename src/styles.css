@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply m-0 bg-[#faf9f6] font-sans text-[#242329] antialiased dark:bg-[#141419] dark:text-[#f1f0f4];
+  }
+
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 2px solid #8b5cf6; outline-offset: 5px; }
+  ::selection { background: #c4b5fd; color: #231942; }
+}
