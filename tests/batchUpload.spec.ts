@@ -59,12 +59,15 @@ test('selects multiple images, persists each receipt and allows the same batch t
     await route.fulfill({ json: match!.data })
   })
   await page.goto('./')
+  const totals = page.getByLabel('Collected receipt totals').locator('dd')
+  await expect(totals).toHaveText(['0,00 сом', '0,00 сом'])
   const files = await Promise.all(receipts.map((entry, index) => qrFile(entry.url, `receipt-${index + 1}.png`)))
 
   for (let attempt = 0; attempt < 2; attempt++) {
     await chooseImages(page, files)
     await expect(page.getByRole('status')).toHaveText('2 files imported.')
     await expect(page.getByRole('heading', { name: 'Receipts (2)', exact: true })).toBeVisible()
+    await expect(totals).toHaveText(['1 842,00 сом', '195,33 сом'])
     await expect(page.getByLabel('Receipt images', { exact: true })).toHaveValue('')
     await expect(page.getByRole('button', { name: 'Upload files', exact: true })).toBeEnabled()
     expect(requestedUrls).toEqual(Array.from({ length: attempt + 1 }, () => receipts.map((entry) => entry.url)).flat())
@@ -92,6 +95,7 @@ test('selects multiple images, persists each receipt and allows the same batch t
   }
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Receipts (2)', exact: true })).toBeVisible()
+  await expect(totals).toHaveText(['1 842,00 сом', '195,33 сом'])
   for (const [index, { data }] of receipts.entries()) {
     const merchant = page.getByRole('cell', { name: `${data.crData.locationName} 1 Example Street, Bishkek`, exact: true })
     await expect(merchant).toBeVisible()

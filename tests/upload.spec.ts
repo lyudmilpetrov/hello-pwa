@@ -298,6 +298,7 @@ test('reimport updates the existing receipt instead of adding a duplicate', asyn
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('taxes.receipts.v1')!))
   expect(saved.receipts).toHaveLength(1)
   expect(saved.receipts[0].totalAmountMinor).toBe(100000)
+  await expect(page.getByLabel('Collected receipt totals').locator('dd')).toHaveText(['1 000,00 сом', '97,65 сом'])
 })
 
 test('failed receipt fetch can be retried without adding a partial record', async ({ page }) => {

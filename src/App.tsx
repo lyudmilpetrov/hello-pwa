@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from 'react'
 import { CameraScanner } from './components/CameraScanner'
 import { MerchantsDialog } from './components/MerchantsDialog'
 import { ReceiptTable } from './components/ReceiptTable'
+import { ReceiptTotals } from './components/ReceiptTotals'
 import { loadReceipt, normalizeReceiptUrl } from './lib/receiptApi'
 import { readReceiptUrl } from './lib/receiptBarcode'
 import { parseReceipt } from './lib/receiptData'
@@ -202,6 +203,7 @@ export default function App() {
         <h1 className="text-3xl font-semibold tracking-tight">Receipt collector</h1>
         <p className="mt-2 text-sm text-black/55 dark:text-white/55">Keep receipt details and VAT together.</p>
       </header>
+      <ReceiptTotals receipts={receipts} />
       <div role="group" aria-label="Image actions" className="inline-flex items-center gap-1 rounded-2xl border border-black/10 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#1e1e25]">
         <button ref={cameraButton} type="button" onClick={() => { setImportFailures([]); setNotice(''); setCameraOpen(true) }} disabled={isBusy || cameraOpen} aria-haspopup="dialog" className="inline-flex min-h-12 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm font-medium transition-colors hover:bg-violet-50 hover:text-violet-700 disabled:cursor-wait disabled:opacity-50 sm:px-5 dark:hover:bg-violet-400/10 dark:hover:text-violet-300">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

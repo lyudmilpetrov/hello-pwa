@@ -18,10 +18,13 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('clears loaded state and all local storage, stays empty after reload, and allows new imports', async ({ page }) => {
+  const totals = page.getByLabel('Collected receipt totals').locator('dd')
+  await expect(totals).toHaveText(['919,50 сом', '97,65 сом'])
   await page.emulateMedia({ colorScheme: 'light' })
   await page.getByLabel('Or paste a receipt link').fill(receiptUrl)
   await page.getByRole('button', { name: 'Clear Memory' }).click()
   await expect(page.getByRole('heading', { name: 'Receipts (0)' })).toBeVisible()
+  await expect(totals).toHaveText(['0,00 сом', '0,00 сом'])
   await expect(page.getByRole('button', { name: 'Download Excel' })).toBeDisabled()
   await expect(page.getByLabel('Or paste a receipt link')).toHaveValue('')
   await expect(page.locator('html')).not.toHaveClass('dark')
@@ -29,6 +32,7 @@ test('clears loaded state and all local storage, stays empty after reload, and a
   expect(await page.evaluate(() => localStorage.length)).toBe(0)
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Receipts (0)' })).toBeVisible()
+  await expect(totals).toHaveText(['0,00 сом', '0,00 сом'])
   expect(await page.evaluate(() => localStorage.length)).toBe(0)
 
   await page.route('**/api/receipts', route => route.fulfill({ json: fixture }))
@@ -37,6 +41,7 @@ test('clears loaded state and all local storage, stays empty after reload, and a
   await expect(page.getByRole('link', { name: 'View receipt' })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('link', { name: 'View receipt' })).toBeVisible()
+  await expect(totals).toHaveText(['919,50 сом', '97,65 сом'])
 })
 
 test('reports storage failures while still clearing current Redux state', async ({ page }) => {
