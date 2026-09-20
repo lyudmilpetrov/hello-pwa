@@ -37,3 +37,10 @@ npm test
 ```
 
 The browser checks cover persisted themes, a narrow mobile viewport, the manifest and icons, and an offline reload of the production build.
+
+To use an existing Edge installation instead of downloading Chromium, run this in PowerShell:
+
+```powershell
+$env:PLAYWRIGHT_CHANNEL = 'msedge'
+npm test
+```
