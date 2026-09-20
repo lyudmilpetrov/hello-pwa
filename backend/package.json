@@ -1,0 +1,19 @@
+{
+  "name": "taxes-receipt-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "dev:worker": "wrangler dev --ip 127.0.0.1 --port 8787 --var RECEIPT_ALLOWED_ORIGINS:https://lyudmilpetrov.github.io,http://127.0.0.1:5173",
+    "check:worker": "wrangler deploy --dry-run",
+    "deploy:worker": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.135.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "taxes-receipt-api",
+  "account_id": "adc2aa45bd5d8d749ce4878b9e8c2c0a",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-09-20",
+  "workers_dev": true,
+  "vars": {
+    "BASE_PATH": "/",
+    "RECEIPT_ALLOWED_ORIGINS": "https://lyudmilpetrov.github.io"
+  }
+}

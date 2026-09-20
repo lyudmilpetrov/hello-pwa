@@ -12,5 +12,5 @@
     "verbatimModuleSyntax": true,
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "backend/src", "server", "vite.config.ts"]
 }

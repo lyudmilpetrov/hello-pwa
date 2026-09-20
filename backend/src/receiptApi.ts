@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import type { Plugin } from 'vite'
 
 const RECEIPT_ENDPOINT = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket'
 const QUERY_KEYS = ['date', 'sum', 'fn_number', 'regNumber', 'tin', 'type', 'operation_type', 'fd_number', 'fm']
@@ -201,18 +200,4 @@ export function configuredAllowedOrigins(): string[] {
     }
   }
   return origins
-}
-
-export function configureReceiptApi(): Plugin {
-  let basePath = '/'
-  return {
-    name: 'local-receipt-api',
-    configResolved(config) { basePath = config.base },
-    configureServer(server) {
-      server.middlewares.use(createReceiptMiddleware({ basePath, allowedOrigins: configuredAllowedOrigins() }))
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use(createReceiptMiddleware({ basePath, allowedOrigins: configuredAllowedOrigins() }))
-    },
-  }
 }

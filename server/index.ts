@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { configuredAllowedOrigins, createReceiptMiddleware, normalizeBasePath } from './receiptApi.ts'
+import { configuredAllowedOrigins, createReceiptMiddleware, normalizeBasePath } from '../backend/src/receiptApi.ts'
 
 const defaultDist = resolve(dirname(fileURLToPath(import.meta.url)), '../dist')
 const mimeTypes: Record<string, string> = {

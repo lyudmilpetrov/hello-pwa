@@ -21,6 +21,19 @@ npm install
 npm run dev
 ```
 
+By default, this starts the Vite frontend at `http://127.0.0.1:5173` and the separate Node receipt API at `http://127.0.0.1:3001`. Vite proxies the frontend's receipt requests to the API. Ctrl+C stops both processes. No Azure service or local configuration is needed to import receipts locally.
+
+To use the deployed Cloudflare Worker from the local frontend, put these settings in the repository root's `.env.development.local`, then restart `npm run dev`:
+
+```dotenv
+RECEIPT_API_PROXY_TARGET=https://taxes-receipt-api.taxes-kyrgyzstan.workers.dev
+VITE_RECEIPT_API_BASE_URL=
+```
+
+In this mode, only Vite starts. Receipt requests go from the browser to Vite, then to the deployed Worker; localhost does not need to be added to the Worker's CORS origins. The terminal prints the remote API URL. DevTools shows the local `/api/receipts` request because Vite forwards it on the server. This setting works with both `localhost` and `127.0.0.1`, requires an internet connection for imports, and does not change GitHub Pages builds or production preview. Remove `RECEIPT_API_PROXY_TARGET` and restart to return to the local Node API. The settings file is ignored by Git.
+
+The API is a standalone Node app in [`backend/`](backend/README.md), with its own `package.json` and no npm dependencies. Use `npm run dev:api` from this directory to run only the backend, or `cd backend` and `npm start` to run it independently. Copy `backend/.env.example` to `backend/.env` for optional API settings. The root `.env.example` documents optional frontend settings in `.env.local`, including `API_PORT` to change the local API/proxy port together.
+
 ## Build and preview
 
 ```sh
@@ -28,13 +41,15 @@ npm run build
 npm run preview
 ```
 
+Preview starts the built frontend and the standalone receipt API together, using the same local proxy configuration as development.
+
 The top-right version shows the release build time in UTC as `YYYY-MM-DD:hh:mm:ss`. Vite embeds it at build time, so it stays the same across refreshes and offline use and changes with each new build.
 
-The tax receipt endpoint returns JSON and does not allow cross-origin browser requests. The app uses its own `POST /api/receipts` endpoint to retrieve that JSON. Vite development and preview servers include this endpoint. Images stay in the browser; only the decoded receipt link is sent to the app server, which fetches the fixed `tax.salyk.kg` receipt endpoint.
+The tax receipt endpoint returns JSON and does not allow cross-origin browser requests. The app uses its own `POST /api/receipts` endpoint to retrieve that JSON. Vite development and preview servers proxy this endpoint to the separate Node API. Images stay in the browser; only the decoded receipt link is sent to the API, which fetches the fixed `tax.salyk.kg` receipt endpoint.
 
 Opening the original receipt in a tab does not let the PWA read its contents. **Take an image** and **Upload files** both call the same receipt importer and need this endpoint on the published site. The service retrieves the receipt and returns its fields; it does not store or back up receipts.
 
-For a production deployment with both the app and its receipt API, build and run the included Node server:
+For an optional production deployment with both the app and its receipt API in one process, build and run the included combined Node server:
 
 ```sh
 npm run build
@@ -43,9 +58,9 @@ npm start
 
 It listens on `127.0.0.1:3000` by default. Configure `HOST`, `PORT`, and `BASE_PATH` for your host. Use the same `BASE_PATH` at build and runtime, for example `/hello-pwa/`. Put the Node server behind HTTPS for public use; when a reverse proxy terminates HTTPS, include the public app origin in `RECEIPT_ALLOWED_ORIGINS`.
 
-To keep GitHub Pages and deploy just the receipt-fetching service, run `./scripts/package-receipt-api.ps1` in PowerShell. It creates `artifacts/receipt-api/receipt-api.zip` containing only the two server source files and a dependency-free Node package manifest. The package excludes receipt photos, saved receipts, environment files, credentials, and frontend assets. Run it with Node 24+ using `npm start`, `HOST=0.0.0.0`, `BASE_PATH=/`, and `RECEIPT_ALLOWED_ORIGINS=https://lyudmilpetrov.github.io`. The host can supply `PORT`; otherwise it listens on 3000. The root page returns 404 because this package serves only `/api/receipts`.
+To keep GitHub Pages and deploy just the receipt API, run `./scripts/package-receipt-api.ps1` in PowerShell. It creates `artifacts/receipt-api/receipt-api.zip` containing the standalone backend's package manifest, README, and two source files, with no frontend assets, receipt photos, or environment files. It runs with Node 24+ using `npm start`; the default standalone API port is 3001, and the host's `PORT` takes precedence. `GET /health` checks the service and `POST /api/receipts` imports receipts.
 
-Azure App Service is one supported host: a Linux **F1 Free** plan with **Node 24 LTS**, HTTPS enabled, and startup command `node server/index.ts` can run this ZIP without installing packages. Keep `SCM_DO_BUILD_DURING_DEPLOYMENT=false`. After deployment, set the GitHub Actions variable `RECEIPT_API_BASE_URL` to the service's HTTPS root URL and rerun the Pages workflow. Hosting must be configured before the frontend can automatically import either camera or uploaded receipts. The [Azure Node quickstart](https://learn.microsoft.com/en-us/azure/app-service/quickstart-nodejs) documents the F1 tier and Node runtime.
+For Azure App Service, use a Linux **F1 Free** plan, **Node 24 LTS**, HTTPS, and startup command `npm start`. Set `HOST=0.0.0.0`, `BASE_PATH=/`, `RECEIPT_ALLOWED_ORIGINS=https://lyudmilpetrov.github.io`, and `SCM_DO_BUILD_DURING_DEPLOYMENT=false`; leave `PORT` to Azure. Follow the [backend deployment instructions](backend/README.md#package-for-azure-app-service), including an optional CLI example that explicitly selects your intended subscription. The [Azure Node quickstart](https://learn.microsoft.com/en-us/azure/app-service/quickstart-nodejs) documents the plan and runtime options. After deployment, set the GitHub Actions variable `RECEIPT_API_BASE_URL` to the service's HTTPS root URL and rerun the Pages workflow.
 
 The service worker is enabled in production builds. Open the app once online, let it activate, and then reload offline to view previously imported receipts. New receipt imports need an internet connection. Supported browsers can install the app using their install or Add to Home Screen action.
 
@@ -53,7 +68,7 @@ The service worker is enabled in production builds. Open the app once online, le
 
 Live site: https://lyudmilpetrov.github.io/hello-pwa/
 
-GitHub Pages serves only the frontend; it cannot run the receipt API. To enable receipt imports there, host the included Node server over HTTPS, set its `RECEIPT_ALLOWED_ORIGINS` to `https://lyudmilpetrov.github.io`, and set the repository Actions variable `RECEIPT_API_BASE_URL` to that server's base URL. The workflow passes this value to `VITE_RECEIPT_API_BASE_URL` during the frontend build. The base URL must end at the app root, without `api/receipts` (for example `https://receipts.example.com/`). Local development needs no such setting.
+GitHub Pages serves only the frontend; it cannot run the receipt API. To enable receipt imports there, deploy the standalone [`backend/`](backend/README.md) Node app over HTTPS, set its `RECEIPT_ALLOWED_ORIGINS` to `https://lyudmilpetrov.github.io`, and set the repository Actions variable `RECEIPT_API_BASE_URL` to that server's base URL. The workflow passes this value to `VITE_RECEIPT_API_BASE_URL` during the frontend build. The base URL must end at the app root, without `api/receipts` (for example `https://receipts.example.com/`). Local development needs no such setting.
 
 If a QR link is detected but importing fails on the phone, check the browser's `/api/receipts` request before changing the scanner. A GitHub Pages HTML 404/405 means the receipt backend is missing. The tax website can open in a separate tab while blocking direct JavaScript access from another origin, so opening the URL with the phone's Camera app does not verify the import API. The PWA preserves the decoded link and offers **Open original receipt** when importing fails. Configure the backend URL and rebuild the frontend to enable automatic importing; an HTTPS backend with the allowed Pages origin is required. The app does not send receipt links to public CORS proxies.
 
@@ -88,7 +103,8 @@ Workflow setup follows the [Vite GitHub Pages guide](https://vite.dev/guide/stat
 - `src/components/ReceiptTable.tsx`: semantic receipt and purchased-item tables, with horizontal scrolling on small screens and links to original receipts.
 - `src/lib/receiptData.ts`: validates and normalizes the tax service response. VAT comes only from VAT counters; sales tax is separate, and missing VAT remains unknown rather than being replaced with zero.
 - `src/store/`: typed Redux store, duplicate-safe receipt updates, and validated localStorage persistence under `taxes.receipts.v1`.
-- `server/`: receipt JSON retrieval and production static server. Receipt requests accept only the fixed tax receipt host/path and its known parameters, with bounded sizes/timeouts and no redirects.
+- `backend/`: standalone Node receipt API and deployment documentation. Receipt requests accept only the fixed tax receipt host/path and its known parameters, with bounded sizes/timeouts and no redirects.
+- `server/`: optional combined production server that serves the frontend and reuses the standalone API handler.
 - `src/components/CameraScanner.tsx`: mobile camera dialog with a detailed rear-camera stream, optional focus/light/zoom controls, and native photo-capture fallback. It continuously scans using multiple detail levels and the native BarcodeDetector where available alongside bundled ZXing, stops the camera, and passes the decoded link to the shared receipt importer. Cancel/Escape, backgrounding, failure, and page exit release camera tracks; permission failures support retry. Camera access requires HTTPS or localhost.
 - `src/lib/receiptBarcode.ts`: local QR decoding and website URL validation. Images are processed in the browser without uploading them to a server. When a photo contains two QR codes, the scanner uses the bottom code for the fiscal receipt. If that code cannot be read or does not contain an HTTP or HTTPS website link, it shows an error instead of opening the promotional code above it.
 - `src/styles.css`: Tailwind import, dark variant, and global styles.

@@ -4,11 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "node scripts/run-local.mjs dev",
+    "dev:api": "npm --prefix backend run dev",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1",
+    "preview": "node scripts/run-local.mjs preview",
     "start": "node server/index.ts",
-    "test": "playwright test"
+    "test": "playwright test",
+    "test:api": "playwright test --config server/receipt-tests.config.ts"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.12.0",

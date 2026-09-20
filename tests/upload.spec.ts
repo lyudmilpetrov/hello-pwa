@@ -87,7 +87,7 @@ test('saved receipts are available after reloading offline', async ({ page, cont
   await expect(page.getByRole('cell', { name: 'Sample Market 1 Example Street, Bishkek' })).toBeVisible()
   await expect(page.getByRole('cell', { name: '97,65', exact: true })).toBeVisible()
   await expect(page.getByRole('cell', { name: '191', exact: true })).toBeVisible()
-  await expect(page.locator('time')).toHaveText('17.09.2026')
+  await expect(page.getByRole('table', { name: 'Imported receipt information', exact: true }).locator('time')).toHaveText('17.09.2026')
 })
 
 test('prefers the receipt QR below a promotional QR', async ({ page }) => {
@@ -207,7 +207,7 @@ test('imports all receipt fields and purchased items into Redux and durable stor
   for (const value of ['191', '919,50', '97,65', '00000000000001', '000000000000003', '000000000000002', '000000000000004', '172045']) {
     await expect(page.getByRole('cell', { name: value, exact: true })).toBeVisible()
   }
-  await expect(page.locator('time')).toHaveText('17.09.2026')
+  await expect(page.getByRole('table', { name: 'Imported receipt information', exact: true }).locator('time')).toHaveText('17.09.2026')
   await page.getByText('Purchased items (3)', { exact: true }).click()
   await expect(page.getByRole('cell', { name: 'Shaving foam', exact: true })).toBeVisible()
   await expect(page.getByRole('cell', { name: '509,70', exact: true })).toBeVisible()

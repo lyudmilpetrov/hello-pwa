@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net'
 import { expect, test } from '@playwright/test'
-import { createReceiptServer } from '../server/index.ts'
-import { normalizeReceiptUrl } from '../server/receiptApi.ts'
+import { createReceiptServer } from '../backend/src/index.ts'
+import { normalizeReceiptUrl } from '../backend/src/receiptApi.ts'
 
 const receiptUrl = 'https://tax.salyk.kg/tax-web-control/client/api/v1/ticket?date=20260917T175623&sum=91950&fn_number=0000000002369707&regNumber=0000000000229871&tin=01007200310037&type=3&operation_type=1&fd_number=172045&fm=254486752077560'
 const receipt = { id: 'example-receipt', ticketTotalSum: 91950, items: [{ goodName: 'Test item', goodQuantity: 1, goodCost: 91950 }] }
@@ -139,17 +139,40 @@ test('receipt API permits only the configured cross-origin frontend', async () =
   })
 })
 
-test('production server serves the app and receipt API under the configured base path', async () => {
+test('standalone server serves only the receipt API under the configured base path', async () => {
   await withServer({ basePath: '/hello-pwa/' }, async (baseUrl) => {
     const page = await fetch(`${baseUrl}/hello-pwa/`)
-    expect(page.status).toBe(200)
-    expect(page.headers.get('content-type')).toContain('text/html')
+    expect(page.status).toBe(404)
+    expect(page.headers.get('content-type')).toContain('application/json')
+    expect(await page.json()).toEqual({ error: 'Not found.' })
     const response = await post(`${baseUrl}/hello-pwa`)
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual(receipt)
-    expect((await post(baseUrl)).status).toBe(405)
+    expect((await post(baseUrl)).status).toBe(404)
     expect((await fetch(`${baseUrl}/hello-pwa/.env`)).status).toBe(404)
     expect((await fetch(`${baseUrl}/hello-pwa/C:/Windows/win.ini`)).status).toBe(404)
     expect((await fetch(`${baseUrl}/hello-pwa/missing.js`)).status).toBe(404)
+  })
+})
+
+test('standalone server exposes a root health check without contacting the tax service', async () => {
+  let upstreamCalls = 0
+  await withServer({ basePath: '/hello-pwa/', fetchImpl: async () => {
+    upstreamCalls++
+    return Response.json(receipt)
+  } }, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/health`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toContain('application/json')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toEqual({ status: 'ok' })
+    const head = await fetch(`${baseUrl}/health`, { method: 'HEAD' })
+    expect(head.status).toBe(200)
+    expect(head.headers.get('content-length')).toBe(response.headers.get('content-length'))
+    expect(await head.text()).toBe('')
+    const wrongMethod = await fetch(`${baseUrl}/health`, { method: 'POST' })
+    expect(wrongMethod.status).toBe(405)
+    expect(wrongMethod.headers.get('allow')).toBe('GET, HEAD')
+    expect(upstreamCalls).toBe(0)
   })
 })
